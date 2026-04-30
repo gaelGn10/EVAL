@@ -1,0 +1,15 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+
+/* bg 1 212121 */
+/* bg 2 262626 */
+/* border 333333 */
+
+/* primary ff6c37 */
+/* hover 602b1f */
+/* blue 3a82e6 */
+
+button {
+    /* @apply cursor-pointer px-2 py-2 rounded hover:bg-neutral-200 hover:text-neutral-700 active:bg-neutral-700 active:text-neutral-200 transition-all; */
+}

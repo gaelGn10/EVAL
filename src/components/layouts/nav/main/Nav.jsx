@@ -1,0 +1,59 @@
+import NavMainButton from "./NavMainButton";
+import NavFooterButton from "./NavFooterButton";
+import NavButton from "./NavButton";
+import { LayoutDashboard, FileTypeCorner, InfoIcon } from "lucide-react";
+
+const navs = [
+  {
+    title: "Pages",
+    links: [
+      {
+        label: "hello",
+        url: "/",
+        icon: <LayoutDashboard />
+      },
+      {
+        label: "about",
+        url: "/about",
+        icon: <InfoIcon />
+      }
+    ]
+  },
+  {
+    title: "Example",
+    links: [
+      {
+        label: "read file",
+        url: "/examples/csv",
+        icon: <FileTypeCorner />
+      }
+    ]
+  }
+];
+
+const Nav = () => {
+
+  return (
+    <nav className="flex flex-col rounded-lg shadow-sm border border-neutral-200 bg-neutral-50 w-60 gap-4 px-2 py-2">
+      <NavMainButton />
+
+      {navs.map(nav => (
+
+        <div key={nav.title} className="flex flex-col gap-1.5">
+          <div className="flex capitalize text-xs font-inter-l px-2 text-neutral-500 mt-1 mb-0.5">{nav.title}</div>
+
+          {nav.links.map(link => (
+            <NavButton key={link.url} to={link.url} label={link.label} icon={link.icon} />
+          ))}
+
+        </div>
+
+      ))}
+
+      <div className="flex-1" />
+      <NavFooterButton />
+    </nav>
+  );
+};
+
+export default Nav;
