@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 
 const getAuthHeaders = () => {
+  const adminToken = sessionStorage.getItem("bagisto_admin_token");
+  const clientToken = sessionStorage.getItem("bagisto_client_token");
+  
   const headers = { 
     "Content-Type": "application/json",
-    Authorization: `Bearer ${sessionStorage.getItem("bagisto_client_token") || ""}`,
+    Authorization: `Bearer ${adminToken || clientToken || ""}`,
    };
   return headers;
 };

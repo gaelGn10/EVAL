@@ -16,16 +16,17 @@ export default function AdminLogin() {
         setLoading(true);
         setError(null);
 
-        // Simulation de connexion admin (ou appel API si disponible)
+        // Simulation de connexion admin avec identifiants fixes
         setTimeout(() => {
             if (email === "rambelosongael@gmail.com" && password === "bonjour7") {
-                sessionStorage.setItem("bagisto_admin_token", "fake_admin_token_123");
+                // On garde un token pour la protection des routes
+                sessionStorage.setItem("bagisto_admin_token", "fake_admin_token_for_ui");
                 navigate("/admin/dashboard");
             } else {
                 setError("Identifiants administrateur invalides.");
             }
             setLoading(false);
-        }, 1000);
+        }, 800);
     };
 
     return (

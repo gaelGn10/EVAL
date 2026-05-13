@@ -38,10 +38,17 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                    <div className="bg-white rounded-[2rem] shadow-sm border border-gray-100 p-8">
-                        <h2 className="text-2xl font-bold text-gray-800 mb-6">Dernières Activités</h2>
-                        <p className="text-gray-500 italic mb-4">Bienvenue dans votre espace d'administration.</p>
-                    </div>
+                    <Link to="/admin/orders" className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm hover:shadow-md transition-all group flex items-center gap-6">
+                        <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">Gérer les Commandes</h3>
+                            <p className="text-sm text-gray-500">Facturation et expédition des ventes</p>
+                        </div>
+                    </Link>
 
                     <Link to="/admin/reset-data" className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm hover:shadow-md transition-all group flex items-center gap-6">
                         <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">

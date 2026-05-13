@@ -11,6 +11,7 @@ import Orders from "../pages/Orders";
 import AdminLogin from "../components/admin/AdminLogin";
 import AdminDashboard from "../pages/admin/AdminDashboard";
 import AdminResetData from "../pages/admin/AdminResetData";
+import AdminOrders from "../pages/admin/AdminOrders";
 
 const routes = [
   {
@@ -42,6 +43,13 @@ const routes = [
     path: "/admin/dashboard",
     component: AdminDashboard,
     title: "Admin Dashboard",
+    private: true,
+    admin: true,
+  },
+  {
+    path: "/admin/orders",
+    component: AdminOrders,
+    title: "Admin Orders",
     private: true,
     admin: true,
   },
