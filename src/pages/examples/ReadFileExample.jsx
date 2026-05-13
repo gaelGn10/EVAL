@@ -2,7 +2,6 @@ import { useState } from "react";
 import Papa from "papaparse";
 import CsvReader from "../../components/examples/CsvReader";
 import XlsxReader from "../../components/examples/XlsxReader";
-import JSONPretty from "react-json-pretty";
 import JsonView from "@uiw/react-json-view";
 
 const ReadFileExample = () => {

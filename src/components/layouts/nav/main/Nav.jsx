@@ -11,11 +11,6 @@ const navs = [
         label: "hello",
         url: "/",
         icon: <LayoutDashboard />
-      },
-      {
-        label: "about",
-        url: "/about",
-        icon: <InfoIcon />
       }
     ]
   },

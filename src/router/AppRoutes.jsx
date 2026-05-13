@@ -1,8 +1,26 @@
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { AnimatePresence } from "motion/react";
 import Transition from "../components/transitions/Transition";
 import routes from "./routes";
 import Layout from "../components/layouts/Layout";
+
+// Composant pour protéger les routes privées
+const RequireAuth = ({ children }) => {
+  const token = sessionStorage.getItem("bagisto_client_token");
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+  return children;
+};
+
+// Composant pour empêcher l'accès au Login si déjà connecté
+const PublicOnly = ({ children }) => {
+  const token = sessionStorage.getItem("bagisto_client_token");
+  if (token) {
+    return <Navigate to="/accueil" replace />;
+  }
+  return children;
+};
 
 const AppRoutes = () => {
   const location = useLocation();
@@ -11,17 +29,38 @@ const AppRoutes = () => {
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
         <Route element={<Layout />}>
-          {routes.map((route) => (
-            <Route
-              key={route.path}
-              path={route.path}
-              element={
-                <Transition>
-                  <route.component />
-                </Transition>
-              }
-            />
-          ))}
+          {/* Redirection automatique de la racine vers l'accueil */}
+          <Route path="/" element={<Navigate to="/accueil" replace />} />
+
+          {routes.map((route) => {
+            const isLogin = route.path === "/login";
+            const Component = route.component;
+            
+            // On saute la route "/" car on l'a gérée manuellement au-dessus
+            if (route.path === "/") return null;
+
+            return (
+              <Route
+                key={route.path}
+                path={route.path}
+                element={
+                  isLogin ? (
+                    <PublicOnly>
+                      <Transition>
+                        <Component />
+                      </Transition>
+                    </PublicOnly>
+                  ) : (
+                    <RequireAuth>
+                      <Transition>
+                        <Component />
+                      </Transition>
+                    </RequireAuth>
+                  )
+                }
+              />
+            );
+          })}
         </Route>
       </Routes>
     </AnimatePresence>

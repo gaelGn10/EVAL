@@ -1,7 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 
 const getAuthHeaders = () => {
-  const headers = { "Content-Type": "application/json" };
+  const headers = { 
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${sessionStorage.getItem("bagisto_client_token") || ""}`,
+   };
   return headers;
 };
 
@@ -12,7 +15,7 @@ export const useFetch = (url) => {
 
   const fetchData = useCallback(
     async (signal) => {
-      setLoading(true);
+      if (!data) setLoading(true);
       setError(null);
       try {
         const res = await fetch(url, { signal, headers: getAuthHeaders(),  });
