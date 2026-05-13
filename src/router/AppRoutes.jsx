@@ -24,6 +24,26 @@ const PublicOnly = ({ children }) => {
   return children;
 };
 
+// Composant pour protéger les routes admin
+const RequireAdminAuth = ({ children }) => {
+  const token = sessionStorage.getItem("bagisto_admin_token");
+  const location = useLocation();
+
+  if (!token) {
+    return <Navigate to="/admin/login" state={{ from: location }} replace />;
+  }
+  return children;
+};
+
+// Composant pour empêcher l'accès au Login admin si déjà connecté en tant qu'admin
+const PublicAdminOnly = ({ children }) => {
+  const token = sessionStorage.getItem("bagisto_admin_token");
+  if (token) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+  return children;
+};
+
 const AppRoutes = () => {
   const location = useLocation();
 
@@ -35,7 +55,8 @@ const AppRoutes = () => {
           <Route path="/" element={<Navigate to="/accueil" replace />} />
 
           {routes.map((route) => {
-            const isLogin = route.path === "/login";
+            const isUserLogin = route.path === "/login";
+            const isAdminLogin = route.path === "/admin/login";
             const Component = route.component;
             
             // On saute la route "/" car on l'a gérée manuellement au-dessus
@@ -46,12 +67,24 @@ const AppRoutes = () => {
                 key={route.path}
                 path={route.path}
                 element={
-                  isLogin ? (
+                  isUserLogin ? (
                     <PublicOnly>
                       <Transition>
                         <Component />
                       </Transition>
                     </PublicOnly>
+                  ) : isAdminLogin ? (
+                    <PublicAdminOnly>
+                      <Transition>
+                        <Component />
+                      </Transition>
+                    </PublicAdminOnly>
+                  ) : route.admin ? (
+                    <RequireAdminAuth>
+                      <Transition>
+                        <Component />
+                      </Transition>
+                    </RequireAdminAuth>
                   ) : route.private ? (
                     <RequireAuth>
                       <Transition>

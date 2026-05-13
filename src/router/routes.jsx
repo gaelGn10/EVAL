@@ -8,6 +8,9 @@ import ProductDetail from "../pages/ProductDetail";
 import Cart from "../pages/Cart";
 import Checkout from "../pages/Checkout";
 import Orders from "../pages/Orders";
+import AdminLogin from "../components/admin/AdminLogin";
+import AdminDashboard from "../pages/admin/AdminDashboard";
+import AdminResetData from "../pages/admin/AdminResetData";
 
 const routes = [
   {
@@ -27,6 +30,27 @@ const routes = [
     component: login,
     title: "login",
     private: false,
+  },
+  {
+    path: "/admin/login",
+    component: AdminLogin,
+    title: "Admin Login",
+    private: false,
+    admin: false,
+  },
+  {
+    path: "/admin/dashboard",
+    component: AdminDashboard,
+    title: "Admin Dashboard",
+    private: true,
+    admin: true,
+  },
+  {
+    path: "/admin/reset-data",
+    component: AdminResetData,
+    title: "Reset Data",
+    private: true,
+    admin: true,
   },
 
   {
