@@ -110,22 +110,22 @@ export default function Orders() {
                 </div>
 
                 <div className="flex items-center gap-4">
-                    <button 
-                      onClick={() => toggleOrder(order.id)}
-                      className={`flex-grow sm:flex-none font-bold px-6 py-3 rounded-xl transition-all flex items-center justify-center gap-2 ${expandedOrders[order.id] ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-800 hover:bg-gray-100'}`}
-                    >
-                        {expandedOrders[order.id] ? 'Fermer' : 'Détails'}
-                        <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-transform ${expandedOrders[order.id] ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                    </button>
+                  <button
+                    onClick={() => toggleOrder(order.id)}
+                    className={`flex-grow sm:flex-none font-bold px-6 py-3 rounded-xl transition-all flex items-center justify-center gap-2 ${expandedOrders[order.id] ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-800 hover:bg-gray-100'}`}
+                  >
+                    {expandedOrders[order.id] ? 'Fermer' : 'Détails'}
+                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-transform ${expandedOrders[order.id] ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
                 </div>
               </div>
-              
+
               {/* Order Items Detailed List (Collapsible) */}
               <AnimatePresence>
                 {expandedOrders[order.id] && order.items && (
-                  <motion.div 
+                  <motion.div
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
                     exit={{ height: 0, opacity: 0 }}
@@ -137,13 +137,14 @@ export default function Orders() {
                         {order.items.map((item, i) => (
                           <div key={i} className="flex items-center gap-4 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
                             <div className="w-14 h-14 bg-gray-50 rounded-xl overflow-hidden flex-shrink-0 border border-gray-100">
-                              <img 
-                                src={item.product?.images?.[0]?.path 
-                                    ? `http://localhost:8008/public/cache/medium/product/${item.product_id}/${item.product.images[0].path.split('/').pop()}`
-                                    : (item.product?.images?.[0]?.url || "https://via.placeholder.com/64x64")
-                                } 
-                                alt={item.name} 
-                                className="w-full h-full object-cover" 
+                              <img
+                                src={
+                                  item.product?.images?.[0]?.medium_image_url
+                                  || item.product?.images?.[0]?.url
+                                  || "https://via.placeholder.com/150x150?text=Produit"
+                                }
+                                alt={item.name}
+                                className="w-full h-full object-cover"
                               />
                             </div>
                             <div className="flex-grow min-w-0">

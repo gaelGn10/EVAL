@@ -1,9 +1,10 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useFetch } from "../hooks/useHttpRequest";
 import { useState } from "react";
 
 export default function ProductsByCategory() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { data, loading, error } = useFetch(
     `http://localhost:8008/api/v1/products?category_id=${id}`
   );
@@ -38,7 +39,7 @@ export default function ProductsByCategory() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {products.map((product) => (
-            <ProductCard key={product.id} product={product} />
+            <ProductCard key={product.id} product={product} navigate={navigate} />
           ))}
         </div>
       )}
@@ -48,9 +49,16 @@ export default function ProductsByCategory() {
 
 
 
-function ProductCard({ product }) {
+function ProductCard({ product, navigate }) {
   const [quantity, setQuantity] = useState(1);
 const handleAddToCart = async () => {
+  const token = sessionStorage.getItem("bagisto_client_token");
+
+  if (!token) {
+    alert("Veuillez vous connecter pour ajouter des produits au panier.");
+    navigate("/login", { state: { from: { pathname: "/cart" } } });
+    return;
+  }
 
   try {
 
@@ -61,7 +69,7 @@ const handleAddToCart = async () => {
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
-          Authorization: `Bearer ${sessionStorage.getItem("bagisto_client_token")}`
+          Authorization: `Bearer ${token}`
         },
 
         body: JSON.stringify({

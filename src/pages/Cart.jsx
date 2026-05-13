@@ -27,7 +27,7 @@ export default function Cart() {
 
   const handleRemoveItem = async (itemId) => {
     if (!confirm("Voulez-vous retirer cet article du panier ?")) return;
-    
+
     setIsProcessing(itemId);
     try {
       const response = await fetch(`http://localhost:8008/api/v1/customer/cart/remove/${itemId}`, {
@@ -57,7 +57,7 @@ export default function Cart() {
 
   const handleUpdateQuantity = (itemId, newQty) => {
     if (newQty < 1) return;
-    
+
     // 1. Instant Optimistic UI Update
     const oldQty = localQuantities[itemId];
     setLocalQuantities(prev => ({ ...prev, [itemId]: newQty }));
@@ -163,9 +163,9 @@ export default function Cart() {
             {cartItems.length} {cartItems.length > 1 ? 'articles sélectionnés' : 'article sélectionné'}
           </p>
         </div>
-        
+
         {cartItems.length > 0 && (
-          <button 
+          <button
             onClick={handleEmptyCart}
             className="text-red-500 hover:text-red-600 text-sm font-bold flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-red-50 transition-all"
           >
@@ -182,7 +182,7 @@ export default function Cart() {
         <div className="lg:col-span-2 space-y-6">
           <AnimatePresence mode="popLayout">
             {cartItems.length === 0 ? (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-gray-50 rounded-[2.5rem] p-16 text-center border-2 border-dashed border-gray-200"
@@ -213,13 +213,13 @@ export default function Cart() {
                 >
                   {/* Product Image */}
                   <div className="relative w-32 h-32 flex-shrink-0 bg-gray-50 rounded-2xl overflow-hidden group-hover:scale-105 transition-transform duration-500">
-                    <img 
-                      src={item.product?.images?.[0]?.path 
-                        ? `http://localhost:8008/public/cache/medium/product/${item.product_id}/${item.product.images[0].path.split('/').pop()}`
+                    <img
+                      src={item.product?.images?.[0]?.path
+                        ? `${item.product.images[0].medium_image_url}`
                         : (item.product?.images?.[0]?.url || "https://via.placeholder.com/150x150?text=Produit")
-                      } 
-                      alt={item.name} 
-                      className="w-full h-full object-cover" 
+                      }
+                      alt={item.name}
+                      className="w-full h-full object-cover"
                     />
                   </div>
 
@@ -227,11 +227,11 @@ export default function Cart() {
                   <div className="flex-grow text-center sm:text-left">
                     <h3 className="text-xl font-bold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors">{item.name}</h3>
                     <p className="text-sm text-gray-400 font-medium uppercase tracking-widest mb-4">SKU: {item.sku}</p>
-                    
+
                     <div className="flex flex-wrap items-center justify-center sm:justify-start gap-6">
                       {/* Quantity Controls */}
                       <div className="flex items-center bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100 relative overflow-hidden">
-                        <button 
+                        <button
                           onClick={() => handleUpdateQuantity(item.id, (localQuantities[item.id] || item.quantity) - 1)}
                           disabled={(localQuantities[item.id] || item.quantity) <= 1}
                           className="w-8 h-8 flex items-center justify-center text-xl text-gray-400 hover:text-blue-600 disabled:opacity-30 transition-colors"
@@ -241,7 +241,7 @@ export default function Cart() {
                         <span className="w-10 text-center font-bold text-gray-700">
                           {localQuantities[item.id] || item.quantity}
                         </span>
-                        <button 
+                        <button
                           onClick={() => handleUpdateQuantity(item.id, (localQuantities[item.id] || item.quantity) + 1)}
                           className="w-8 h-8 flex items-center justify-center text-xl text-gray-400 hover:text-blue-600 disabled:opacity-30 transition-colors"
                         >
@@ -258,7 +258,7 @@ export default function Cart() {
                   </div>
 
                   {/* Remove Button */}
-                  <button 
+                  <button
                     onClick={() => handleRemoveItem(item.id)}
                     disabled={isProcessing === item.id}
                     className="absolute top-6 right-6 sm:static p-3 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all disabled:opacity-30"
@@ -277,7 +277,7 @@ export default function Cart() {
         <div className="lg:sticky lg:top-8">
           <div className="bg-gray-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-blue-900/20">
             <h2 className="text-2xl font-bold mb-8">Récapitulatif</h2>
-            
+
             <div className="space-y-4 mb-8">
               <div className="flex justify-between text-gray-400">
                 <span>Sous-total</span>
@@ -299,7 +299,7 @@ export default function Cart() {
               </div>
             </div>
 
-            <Link 
+            <Link
               to="/checkout"
               className={`w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-5 rounded-[1.5rem] transition-all shadow-xl shadow-blue-900/20 active:scale-[0.98] flex items-center justify-center gap-3 group ${cartItems.length === 0 ? 'pointer-events-none bg-gray-800 text-gray-600 shadow-none' : ''}`}
             >
@@ -308,14 +308,14 @@ export default function Cart() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>
             </Link>
-            
+
             <p className="text-center text-gray-500 text-xs mt-6 font-medium uppercase tracking-tighter">
               Paiement sécurisé par SSL 256-bit
             </p>
           </div>
-          
-          <Link 
-            to="/accueil" 
+
+          <Link
+            to="/accueil"
             className="flex items-center justify-center gap-2 mt-6 text-gray-500 hover:text-blue-600 font-bold transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

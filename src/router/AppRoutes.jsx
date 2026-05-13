@@ -7,8 +7,10 @@ import Layout from "../components/layouts/Layout";
 // Composant pour protéger les routes privées
 const RequireAuth = ({ children }) => {
   const token = sessionStorage.getItem("bagisto_client_token");
+  const location = useLocation();
+
   if (!token) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
   return children;
 };
@@ -50,12 +52,16 @@ const AppRoutes = () => {
                         <Component />
                       </Transition>
                     </PublicOnly>
-                  ) : (
+                  ) : route.private ? (
                     <RequireAuth>
                       <Transition>
                         <Component />
                       </Transition>
                     </RequireAuth>
+                  ) : (
+                    <Transition>
+                      <Component />
+                    </Transition>
                   )
                 }
               />

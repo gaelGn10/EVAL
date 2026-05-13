@@ -14,52 +14,62 @@ const routes = [
     path: "/",
     component: Home,
     title: "Accueil",
+    private: false,
   },
   {
     path: "/accueil",
     component: accueil,
     title: "accueil",
+    private: false,
   },
   {
     path: "/login",
     component: login,
     title: "login",
+    private: false,
   },
 
   {
     path: "/examples/csv",
     component: ReadFileExample,
     title: "Accueil",
+    private: true,
   },
   {
     path: "/category/:id/products",
     component: ProductsByCategory,
     title: "Produits par catégorie",
+    private: false,
   },
   {
     path: "/product/:id",
     component: ProductDetail,
     title: "Détail produit",
+    private: false,
   },
   {
     path: "/cart",
     component: Cart,
     title: "Mon Panier",
+    private: true,
   },
   {
     path: "/checkout",
     component: Checkout,
     title: "Validation Commande",
+    private: true,
   },
   {
     path: "/orders",
     component: Orders,
     title: "Mes Commandes",
+    private: true,
   },
   {
     path: "*",
     component: NotFound,
     title: "Not Found",
+    private: false,
   },
 ];
 

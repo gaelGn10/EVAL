@@ -1,6 +1,14 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 export default function header(){
+  const navigate = useNavigate();
+  const token = sessionStorage.getItem("bagisto_client_token");
+
+  const handleLogout = () => {
+    sessionStorage.removeItem("bagisto_client_token");
+    // Optionnel: nettoyer d'autres données
+    navigate("/login");
+  };
 
   return (
     <header className="flex justify-between items-center p-4 bg-white shadow-sm sticky top-0 z-50">
@@ -20,9 +28,19 @@ export default function header(){
         <Link to="/orders" className="text-sm font-bold text-gray-500 hover:text-blue-600 transition-colors">
           Mes Commandes
         </Link>
-        <Link to="/login" className="text-sm font-bold text-gray-600 hover:text-blue-600 transition-colors bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
-          Connexion
-        </Link>
+        
+        {token ? (
+          <button 
+            onClick={handleLogout}
+            className="text-sm font-bold text-red-600 hover:text-red-700 hover:bg-red-50 transition-all bg-gray-50 px-4 py-2 rounded-xl border border-gray-100"
+          >
+            Déconnexion
+          </button>
+        ) : (
+          <Link to="/login" className="text-sm font-bold text-gray-600 hover:text-blue-600 transition-colors bg-gray-50 px-4 py-2 rounded-xl border border-gray-100">
+            Connexion
+          </Link>
+        )}
       </div>
     </header>
   )

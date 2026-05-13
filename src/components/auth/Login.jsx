@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link, useLocation } from "react-router-dom";
 import { useMutation } from "../../hooks/useHttpRequest";
 import { motion } from "motion/react";
 
 export default function Login() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { mutate } = useMutation("http://localhost:8008/api/v1/customer/login");
 
     const [email, setEmail] = useState("");
@@ -26,7 +27,10 @@ export default function Login() {
             
             if (res?.token) {
                 sessionStorage.setItem("bagisto_client_token", res.token);
-                navigate("/accueil");
+                
+                // Rediriger vers la page demandée ou par défaut vers l'accueil
+                const from = location.state?.from?.pathname || "/accueil";
+                navigate(from, { replace: true });
             } else {
                 setError("Identifiants invalides ou erreur serveur.");
             }
@@ -45,7 +49,16 @@ export default function Login() {
                 animate={{ opacity: 1, y: 0 }}
                 className="max-w-md w-full bg-white rounded-[2.5rem] p-10 shadow-2xl border border-gray-100"
             >
-                <div className="text-center mb-10">
+                <div className="text-center mb-10 relative">
+                    <Link 
+                        to="/accueil" 
+                        className="absolute left-0 top-0 text-gray-400 hover:text-blue-600 transition-colors flex items-center gap-1 text-sm font-bold group"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transform group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                        Retour
+                    </Link>
                     <h1 className="text-4xl font-black text-gray-900 tracking-tight mb-2">Bienvenue</h1>
                     <p className="text-gray-500 font-medium">Connectez-vous pour accéder à la boutique</p>
                 </div>
