@@ -2,10 +2,12 @@ import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { useMutation } from "../../hooks/useHttpRequest";
 import { motion } from "motion/react";
+import { useAuth } from "../../context/AuthContext";
 
 export default function Login() {
     const navigate = useNavigate();
     const location = useLocation();
+    const { login } = useAuth();
     const { mutate } = useMutation("http://localhost:8008/api/v1/customer/login");
 
     const [email, setEmail] = useState("");
@@ -27,6 +29,8 @@ export default function Login() {
             
             if (res?.token) {
                 sessionStorage.setItem("bagisto_client_token", res.token);
+                // Sauvegarder l'utilisateur dans le contexte pour l'utiliser ailleurs (ex: Orders.jsx)
+                login({ email: email, ...res.customer }); 
                 
                 // Rediriger vers la page demandée ou par défaut vers l'accueil
                 const from = location.state?.from?.pathname || "/accueil";

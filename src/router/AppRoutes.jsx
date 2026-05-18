@@ -53,6 +53,10 @@ const AppRoutes = () => {
         <Route element={<Layout />}>
           {/* Redirection automatique de la racine vers l'accueil */}
           <Route path="/" element={<Navigate to="/accueil" replace />} />
+          
+          {/* Redirection /admin et /Admin vers le dashboard */}
+          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="/Admin" element={<Navigate to="/admin/dashboard" replace />} />
 
           {routes.map((route) => {
             const isUserLogin = route.path === "/login";

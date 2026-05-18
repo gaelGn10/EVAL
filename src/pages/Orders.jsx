@@ -2,12 +2,65 @@ import { useFetch } from "../hooks/useHttpRequest";
 import { Link } from "react-router-dom";
 import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { useAuth } from "../context/AuthContext";
 
 export default function Orders() {
   const { data, loading, error } = useFetch("http://localhost:8008/api/v1/customer/orders");
   const [expandedOrders, setExpandedOrders] = useState({});
+  const { user } = useAuth();
 
-  const orders = data?.data || [];
+  let orders = data?.data || [];
+
+  // MOCK : Injecter les commandes importées depuis l'admin si elles appartiennent à l'utilisateur
+  try {
+    const mockedOrdersStr = localStorage.getItem('imported_orders');
+    // Catalogue produits : rempli lors de l'import produits, ou pré-rempli si absent
+    let catalog = JSON.parse(localStorage.getItem('product_catalog') || '{}');
+
+    if (mockedOrdersStr && user?.email) {
+       const mockedOrders = JSON.parse(mockedOrdersStr);
+       const userMockedOrders = mockedOrders.filter(o => o.customer_email === user.email);
+       if (userMockedOrders.length > 0) {
+          const formattedMockedOrders = userMockedOrders.map((mo, i) => {
+             // Recalculer le total depuis les items + catalogue (même si grand_total était 0)
+             const itemsWithPrices = (mo.items || []).map(item => {
+                const entry = catalog[item.sku];
+                const price = item.price > 0 ? item.price : (entry?.price || 0);
+                const name  = item.name && !item.name.startsWith('Produit (SKU')
+                               ? item.name
+                               : (entry?.name || `Produit (${item.sku})`);
+                const qty   = item.qty || item.qty_ordered || 1;
+                const total = price * qty;
+                return {
+                   id: Math.random(),
+                   name, sku: item.sku,
+                   qty_ordered: qty,
+                   price, total,
+                   formated_total: `${total.toFixed(2)} €`,
+                   formated_price: `${price.toFixed(2)} €`,
+                };
+             });
+
+             const grandTotal = itemsWithPrices.reduce((sum, it) => sum + it.total, 0);
+
+             return {
+                id: `mock-${i}-${mo.created_at}`,
+                increment_id: `IMP-${1000 + i}`,
+                status: mo.status || 'pending',
+                created_at: mo.created_at
+                  ? new Date(mo.created_at.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1')).toISOString()
+                  : new Date().toISOString(),
+                grand_total: grandTotal.toFixed(2),
+                formated_grand_total: `${grandTotal.toFixed(2)} €`,
+                items: itemsWithPrices,
+             };
+          });
+          orders = [...formattedMockedOrders, ...orders];
+       }
+    }
+  } catch(e) {
+    console.error("Erreur parsing commandes mockées", e);
+  }
 
   const toggleOrder = (orderId) => {
     setExpandedOrders(prev => ({
@@ -52,7 +105,7 @@ export default function Orders() {
         </div>
       </div>
 
-      {error ? (
+      {error && orders.length === 0 ? (
         <div className="bg-red-50 p-8 rounded-[2rem] text-center border border-red-100 max-w-2xl mx-auto">
           <p className="text-red-600 font-bold mb-2">Oups !</p>
           <p className="text-red-500">Impossible de charger vos commandes. Assurez-vous d'être connecté.</p>

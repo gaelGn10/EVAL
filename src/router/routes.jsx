@@ -12,6 +12,8 @@ import AdminLogin from "../components/admin/AdminLogin";
 import AdminDashboard from "../pages/admin/AdminDashboard";
 import AdminResetData from "../pages/admin/AdminResetData";
 import AdminOrders from "../pages/admin/AdminOrders";
+import AdminImport from "../pages/admin/AdminImport";
+
 
 const routes = [
   {
@@ -57,6 +59,13 @@ const routes = [
     path: "/admin/reset-data",
     component: AdminResetData,
     title: "Reset Data",
+    private: true,
+    admin: true,
+  },
+  {
+    path: "/admin/import",
+    component: AdminImport,
+    title: "Import Data",
     private: true,
     admin: true,
   },

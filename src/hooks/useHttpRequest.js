@@ -3,12 +3,23 @@ import { useEffect, useState, useCallback } from "react";
 const getAuthHeaders = () => {
   const adminToken = sessionStorage.getItem("bagisto_admin_token");
   const clientToken = sessionStorage.getItem("bagisto_client_token");
-  
-  const headers = { 
+
+  // Priorité : si on a un token client, on l'utilise (pour les endpoints /customer/*)
+  // Si pas de token client mais un token admin, on utilise l'admin
+  const token = clientToken || adminToken || "";
+  return {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${adminToken || clientToken || ""}`,
-   };
-  return headers;
+    Authorization: `Bearer ${token}`,
+  };
+};
+
+// Headers spécifiquement pour les appels admin (ne jamais utiliser le token client)
+export const getAdminHeaders = () => {
+  const adminToken = sessionStorage.getItem("bagisto_admin_token");
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${adminToken || ""}`,
+  };
 };
 
 export const useFetch = (url) => {
