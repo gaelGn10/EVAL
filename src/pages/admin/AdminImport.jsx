@@ -165,9 +165,12 @@ export default function AdminImport() {
                                 .replace(/(^-|-$)+/g, "");
 
                             const catPayload = {
+                                name: categoryName,
+                                slug: catSlug,
                                 position: 1,
                                 status: 1,
                                 parent_id: 1,
+                                attributes: [11],
                                 locales: ["fr", "en"],
                                 fr: { name: categoryName, slug: catSlug, description: categoryName, meta_title: categoryName },
                                 en: { name: categoryName, slug: catSlug, description: categoryName, meta_title: categoryName }
