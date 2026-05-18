@@ -50,15 +50,15 @@ export default function AdminDashboard() {
                         </div>
                     </Link>
 
-                    <Link to="/admin/reset-data" className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm hover:shadow-md transition-all group flex items-center gap-6">
-                        <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Link to="/admin/stock" className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm hover:shadow-md transition-all group flex items-center gap-6">
+                        <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                             </svg>
                         </div>
                         <div>
-                            <h3 className="text-xl font-bold text-gray-900 group-hover:text-red-600 transition-colors">Réinitialiser les données</h3>
-                            <p className="text-sm text-gray-500">Vider le cache et les sessions locales</p>
+                            <h3 className="text-xl font-bold text-gray-900 group-hover:text-amber-600 transition-colors">Gérer les Stocks</h3>
+                            <p className="text-sm text-gray-500">Mettre à jour les quantités de produits</p>
                         </div>
                     </Link>
 
@@ -71,6 +71,18 @@ export default function AdminDashboard() {
                         <div>
                             <h3 className="text-xl font-bold text-gray-900 group-hover:text-purple-600 transition-colors">Importation</h3>
                             <p className="text-sm text-gray-500">Importer produits et clients (CSV/TXT)</p>
+                        </div>
+                    </Link>
+
+                    <Link to="/admin/reset-data" className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm hover:shadow-md transition-all group flex items-center gap-6">
+                        <div className="w-16 h-16 bg-red-50 text-red-500 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-gray-900 group-hover:text-red-600 transition-colors">Réinitialiser les données</h3>
+                            <p className="text-sm text-gray-500">Vider le cache et les sessions locales</p>
                         </div>
                     </Link>
                 </div>

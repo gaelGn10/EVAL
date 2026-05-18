@@ -1,6 +1,7 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useFetch } from "../hooks/useHttpRequest";
 import { useState } from "react";
+import { useWishlist } from "../context/WishlistContext";
 export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -9,6 +10,7 @@ export default function ProductDetail() {
   );
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState(0);
+  const { toggleWishlist, isInWishlist } = useWishlist();
 
   const handleAddToCart = async () => {
     const token = sessionStorage.getItem("bagisto_client_token");
@@ -85,15 +87,15 @@ export default function ProductDetail() {
           <div className="space-y-4">
             <div className="aspect-square bg-gray-50 rounded-[2.5rem] overflow-hidden border border-gray-100 shadow-inner group flex items-center justify-center p-8">
               <img
-              src={
-               product.images?.[0]?.path
-    
-               ? `${product.images[0].medium_image_url}`
-             : "https://via.placeholder.com/300x300?text=Produit"
-                 }
-                 alt={product.name}
-                 className="max-w-full max-h-full w-auto h-auto object-contain transition-transform duration-700 group-hover:scale-105"
-               />
+                src={
+                  product.images?.[0]?.path
+
+                    ? `${product.images[0].medium_image_url}`
+                    : "https://via.placeholder.com/300x300?text=Produit"
+                }
+                alt={product.name}
+                className="max-w-full max-h-full w-auto h-auto object-contain transition-transform duration-700 group-hover:scale-105"
+              />
             </div>
 
             {images.length > 1 && (
@@ -105,15 +107,15 @@ export default function ProductDetail() {
                     className={`relative flex-shrink-0 w-24 h-24 rounded-2xl overflow-hidden border-2 transition-all ${activeImage === index ? "border-blue-600 shadow-md scale-95" : "border-transparent hover:border-gray-300"
                       }`}
                   >
-                    <img 
-                     src={
-                      product.images?.[0]?.path
-    
-                    ? `${product.images[0].medium_image_url}`
-                    : "https://via.placeholder.com/300x300?text=Produit"
-                        }
-                        alt="" 
-                        className="w-full h-full object-contain p-2" 
+                    <img
+                      src={
+                        product.images?.[0]?.path
+
+                          ? `${product.images[0].medium_image_url}`
+                          : "https://via.placeholder.com/300x300?text=Produit"
+                      }
+                      alt=""
+                      className="w-full h-full object-contain p-2"
                     />
                   </button>
                 ))}

@@ -14,6 +14,9 @@ import AdminResetData from "../pages/admin/AdminResetData";
 import AdminOrders from "../pages/admin/AdminOrders";
 import AdminImport from "../pages/admin/AdminImport";
 import AdminImportImage from "../pages/admin/AdminImportImage";
+import AdminStock from "../pages/admin/AdminStock";
+import Wishlist from "../pages/Wishlist";
+
 
 const routes = [
   {
@@ -70,6 +73,13 @@ const routes = [
     admin: true,
   },
   {
+    path: "/admin/stock",
+    component: AdminStock,
+    title: "Stock Management",
+    private: true,
+    admin: true,
+  },
+  {
     path: "/admin/import-image",
     component: AdminImportImage,
     title: "Import Images",
@@ -112,6 +122,12 @@ const routes = [
     component: Orders,
     title: "Mes Commandes",
     private: true,
+  },
+  {
+    path: "/wishlist",
+    component: Wishlist,
+    title: "Ma Liste d'envies",
+    private: false,
   },
   {
     path: "*",

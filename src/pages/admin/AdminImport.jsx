@@ -75,13 +75,38 @@ export default function AdminImport() {
         return parts;
     };
 
-
     const importProducts = async (file) => {
         try {
             setLoading(true);
             setStatus({ type: "info", message: "Analyse du fichier..." });
             const rawData = await parseFile(file);
             if (!rawData || rawData.length === 0) throw new Error("Fichier vide");
+
+            // 1. Validation : Nom de colonne non conforme
+            const headers = Object.keys(rawData[0] || {});
+            const hasSkuHeader = headers.some(h => ["sku", "ref"].includes(h));
+            const hasNameHeader = headers.some(h => ["name", "nom", "label"].includes(h));
+            const hasPriceHeader = headers.some(h => ["price", "prix", "prix_vente", "prix_promo", "promo"].includes(h));
+            const hasStockHeader = headers.some(h => ["stock_initial", "stock"].includes(h));
+            
+            if (!hasSkuHeader || !hasNameHeader || !hasPriceHeader || !hasStockHeader) {
+                throw new Error("Nom de colonne non conforme. Les colonnes 'sku', 'nom' (ou 'name'), 'prix_vente' (ou 'prix') et 'stock' sont requises.");
+            }
+
+            // 2. Validation : Montant positif
+            for (let i = 0; i < rawData.length; i++) {
+                const row = rawData[i];
+                const sku = (row.sku || row.ref || Object.values(row)[1] || "").toString().trim();
+                const promoVal = (row.prix_promo || row.promo || "").toString().trim();
+                const promoPrice = promoVal ? parseFloat(promoVal.replace(",", ".").replace(/[^-0-9.]/g, "")) || 0 : 0;
+                const regularVal = (row.prix_vente || row.prix || row.price || Object.values(row)[4] || "0").toString();
+                const regularPrice = parseFloat(regularVal.replace(",", ".").replace(/[^-0-9.]/g, "")) || 0;
+                const price = promoPrice > 0 ? promoPrice : regularPrice;
+
+                if (price <= 0 || regularPrice <= 0 || (promoVal && promoPrice <= 0)) {
+                    throw new Error("montant positif requis : le prix du produit '" + (sku || 'Ligne ' + (i+1)) + "' doit être strictement supérieur à 0.");
+                }
+            }
 
             setProgress({ current: 0, total: rawData.length, type: "Produits" });
 
@@ -96,9 +121,9 @@ export default function AdminImport() {
 
                 // ✅ Priorité au prix promo s'il existe et est valide
                 const promoVal = (row.prix_promo || row.promo || "").toString().trim();
-                const promoPrice = promoVal ? parseFloat(promoVal.replace(",", ".").replace(/[^0-9.]/g, "")) || 0 : 0;
+                const promoPrice = promoVal ? parseFloat(promoVal.replace(",", ".").replace(/[^-0-9.]/g, "")) || 0 : 0;
                 const regularVal = (row.prix_vente || row.prix || row.price || Object.values(row)[4] || "0").toString();
-                const regularPrice = parseFloat(regularVal.replace(",", ".").replace(/[^0-9.]/g, "")) || 0;
+                const regularPrice = parseFloat(regularVal.replace(",", ".").replace(/[^-0-9.]/g, "")) || 0;
                 // Le prix effectif : promo si dispo, sinon prix vente
                 const price = promoPrice > 0 ? promoPrice : regularPrice;
                 const hasPromo = promoPrice > 0;
@@ -143,8 +168,6 @@ export default function AdminImport() {
                         throw new Error(createData.message || "Erreur création");
                     }
 
-
-
                     // ÉTAPE 2 : MISE À JOUR DES ATTRIBUTS (NOM, PRIX, ETC.)
                     const updatePayload = {
                         sku: sku,
@@ -177,8 +200,6 @@ export default function AdminImport() {
                     if (updateRes.ok) {
                         successCount++;
                         console.log(`✓ Produit ${sku} mis à jour avec succès !`);
-
-
                     } else {
                         console.error(`✗ Échec mise à jour ${sku}:`, updateData);
                     }
@@ -191,7 +212,7 @@ export default function AdminImport() {
                 message: `${successCount}/${rawData.length} produits importés. Vérifiez la console.`
             });
         } catch (err) {
-            setStatus({ type: "error", message: "Erreur critique : " + err.message });
+            setStatus({ type: "error", message: "Erreur d'importation : " + err.message });
         } finally {
             setLoading(false);
         }
@@ -205,6 +226,17 @@ export default function AdminImport() {
 
             if (!customers || customers.length === 0) {
                 throw new Error("Le fichier semble vide ou mal formaté.");
+            }
+
+            // 1. Validation : Nom de colonne non conforme
+            const headers = Object.keys(customers[0] || {});
+            const hasEmailHeader = headers.some(h => ["client", "email", "mail"].includes(h));
+            const hasFirstNameHeader = headers.some(h => ["first_name", "prenom"].includes(h));
+            const hasLastNameHeader = headers.some(h => ["last_name", "nom"].includes(h));
+            const hasPasswordHeader = headers.some(h => ["password", "pwd"].includes(h));
+            
+            if (!hasEmailHeader || !hasFirstNameHeader || !hasLastNameHeader || !hasPasswordHeader) {
+                throw new Error("Nom de colonne non conforme. Les colonnes 'email', 'prenom', 'nom' et 'password' sont requises.");
             }
 
             setProgress({ current: 0, total: customers.length, type: "Clients" });
@@ -283,13 +315,11 @@ export default function AdminImport() {
                     : `Échec de l'import : 0/${customers.length} créés. Vérifiez la console (F12).`
             });
         } catch (err) {
-            setStatus({ type: "error", message: "Erreur critique : " + err.message });
+            setStatus({ type: "error", message: "Erreur d'importation : " + err.message });
         } finally {
             setLoading(false);
         }
     };
-
-
 
     const importOrders = async (file) => {
         try {
@@ -298,6 +328,45 @@ export default function AdminImport() {
             const rows = await parseFile(file);
 
             if (!rows || rows.length === 0) throw new Error("Le fichier est vide.");
+
+            // 1. Validation : Nom de colonne non conforme
+            const headers = Object.keys(rows[0] || {});
+            const hasDateHeader = headers.some(h => ["date"].includes(h));
+            const hasClientHeader = headers.some(h => ["client", "email"].includes(h));
+            const hasAchatHeader = headers.some(h => ["achat", "achats", "produits"].includes(h));
+            
+            if (!hasDateHeader || !hasClientHeader || !hasAchatHeader) {
+                throw new Error("Nom de colonne non conforme. Les colonnes 'date', 'client' (ou 'email') et 'achat' sont requises.");
+            }
+
+            // 2. Validation : format de date DD/MM/YYYY & montant positif (quantité)
+            const datePattern = /^\d{2}\/\d{2}\/\d{4}$/;
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const email = (row.client || row.email || Object.values(row)[2] || "").toString().trim();
+                const date = (row.date || Object.values(row)[0] || "").toString().trim();
+                const achatStr = (row.achat || row.achats || row.produits || Object.values(row)[3] || "").toString().trim();
+
+                // Validation Date Format
+                if (!datePattern.test(date)) {
+                    throw new Error(`format de date différente de DD/MM/YYYY à la ligne ${i + 1} : la valeur '${date}' est invalide.`);
+                }
+
+                // Validation Montant (Quantités de produits)
+                if (achatStr) {
+                    const cleaned = achatStr.replace(/[\{\}]/g, "");
+                    const parts = cleaned.split("],");
+                    for (const p of parts) {
+                        const inner = p.replace(/[\[\]]/g, "").trim();
+                        if (!inner) continue;
+                        const [skuRaw, qtyRaw] = inner.split(";");
+                        const qty = parseInt(qtyRaw) || 0;
+                        if (qty <= 0) {
+                            throw new Error(`montant positif requis : la quantité du produit '${skuRaw || 'Ligne ' + (i+1)}' doit être supérieure à 0.`);
+                        }
+                    }
+                }
+            }
 
             setProgress({ current: 0, total: rows.length, type: "Commandes" });
 
@@ -587,7 +656,7 @@ export default function AdminImport() {
                 message: `${successCount}/${rows.length} commandes importées avec succès !`
             });
         } catch (err) {
-            setStatus({ type: "error", message: "Erreur critique : " + err.message });
+            setStatus({ type: "error", message: "Erreur d'importation : " + err.message });
         } finally {
             setLoading(false);
         }

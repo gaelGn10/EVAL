@@ -1,6 +1,7 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useFetch } from "../hooks/useHttpRequest";
 import { useState } from "react";
+import { useWishlist } from "../context/WishlistContext";
 
 export default function ProductsByCategory() {
   const { id } = useParams();
@@ -51,68 +52,86 @@ export default function ProductsByCategory() {
 
 function ProductCard({ product, navigate }) {
   const [quantity, setQuantity] = useState(1);
-const handleAddToCart = async () => {
-  const token = sessionStorage.getItem("bagisto_client_token");
+  const { toggleWishlist, isInWishlist } = useWishlist();
+  const isWish = isInWishlist(product.id);
 
-  if (!token) {
-    alert("Veuillez vous connecter pour ajouter des produits au panier.");
-    navigate("/login", { state: { from: { pathname: "/cart" } } });
-    return;
-  }
+  const handleAddToCart = async () => {
+    const token = sessionStorage.getItem("bagisto_client_token");
 
-  try {
-
-    const response = await fetch(`http://localhost:8008/api/v1/customer/cart/add/${product.id}`,
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: `Bearer ${token}`
-        },
-
-        body: JSON.stringify({
-          product_id: product.id,
-          quantity: quantity
-        })
-      }
-    );
-
-    const result = await response.json();
-
-    console.log(result);
-
-    if (!response.ok) {
-      throw new Error(result.message);
+    if (!token) {
+      alert("Veuillez vous connecter pour ajouter des produits au panier.");
+      navigate("/login", { state: { from: { pathname: "/cart" } } });
+      return;
     }
 
-    alert("Produit ajouté au panier ✅");
+    try {
+      const response = await fetch(`http://localhost:8008/api/v1/customer/cart/add/${product.id}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            product_id: product.id,
+            quantity: quantity
+          })
+        }
+      );
 
-  } catch (error) {
+      const result = await response.json();
 
-    console.log(error);
-alert(error.message);
-  }
-  
-};
+      if (!response.ok) {
+        throw new Error(result.message);
+      }
+
+      alert("Produit ajouté au panier ✅");
+
+    } catch (error) {
+      console.log(error);
+      alert(error.message);
+    }
+  };
 
 
   return (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col hover:shadow-xl transition-all duration-300 border border-gray-100">
-      <Link to={`/product/${product.id}`} className="block relative h-52 overflow-hidden group bg-gray-50 flex items-center justify-center p-4">
-   <img
-  src={
-    product.images?.[0]?.path
-    
-      ? `${product.images[0].medium_image_url}`
-      : "https://via.placeholder.com/300x300?text=Produit"
-  }
-  alt={product.name}
-  className="max-w-full max-h-full w-auto h-auto object-contain group-hover:scale-105 transition-transform duration-500"
-/>
+      <div className="block relative h-52 overflow-hidden group bg-gray-50 flex items-center justify-center p-4">
+        <Link to={`/product/${product.id}`} className="absolute inset-0 flex items-center justify-center p-4">
+          <img
+            src={
+              product.images?.[0]?.path
+                ? `${product.images[0].medium_image_url}`
+                : "https://via.placeholder.com/300x300?text=Produit"
+            }
+            alt={product.name}
+            className="max-w-full max-h-full w-auto h-auto object-contain group-hover:scale-105 transition-transform duration-500"
+          />
+        </Link>
         <div className="absolute inset-0 bg-black/5 group-hover:bg-black/0 transition-colors pointer-events-none" />
-      </Link>
+        
+        {/* Floating Heart Button */}
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleWishlist(product);
+          }}
+          className="absolute top-3 right-3 p-2.5 rounded-full bg-white/80 backdrop-blur-md shadow-md border border-gray-100 text-gray-500 hover:text-red-500 hover:bg-white active:scale-90 transition-all z-10"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5 transition-colors"
+            fill={isWish ? "#ef4444" : "none"}
+            viewBox="0 0 24 24"
+            stroke={isWish ? "#ef4444" : "currentColor"}
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+        </button>
+      </div>
       
       <div className="p-4 flex flex-col flex-grow">
         <Link to={`/product/${product.id}`} className="hover:text-blue-600 transition-colors">
