@@ -11,56 +11,7 @@ export default function Orders() {
 
   let orders = data?.data || [];
 
-  // MOCK : Injecter les commandes importées depuis l'admin si elles appartiennent à l'utilisateur
-  try {
-    const mockedOrdersStr = localStorage.getItem('imported_orders');
-    // Catalogue produits : rempli lors de l'import produits, ou pré-rempli si absent
-    let catalog = JSON.parse(localStorage.getItem('product_catalog') || '{}');
 
-    if (mockedOrdersStr && user?.email) {
-       const mockedOrders = JSON.parse(mockedOrdersStr);
-       const userMockedOrders = mockedOrders.filter(o => o.customer_email === user.email);
-       if (userMockedOrders.length > 0) {
-          const formattedMockedOrders = userMockedOrders.map((mo, i) => {
-             // Recalculer le total depuis les items + catalogue (même si grand_total était 0)
-             const itemsWithPrices = (mo.items || []).map(item => {
-                const entry = catalog[item.sku];
-                const price = item.price > 0 ? item.price : (entry?.price || 0);
-                const name  = item.name && !item.name.startsWith('Produit (SKU')
-                               ? item.name
-                               : (entry?.name || `Produit (${item.sku})`);
-                const qty   = item.qty || item.qty_ordered || 1;
-                const total = price * qty;
-                return {
-                   id: Math.random(),
-                   name, sku: item.sku,
-                   qty_ordered: qty,
-                   price, total,
-                   formated_total: `${total.toFixed(2)} €`,
-                   formated_price: `${price.toFixed(2)} €`,
-                };
-             });
-
-             const grandTotal = itemsWithPrices.reduce((sum, it) => sum + it.total, 0);
-
-             return {
-                id: `mock-${i}-${mo.created_at}`,
-                increment_id: `IMP-${1000 + i}`,
-                status: mo.status || 'pending',
-                created_at: mo.created_at
-                  ? new Date(mo.created_at.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1')).toISOString()
-                  : new Date().toISOString(),
-                grand_total: grandTotal.toFixed(2),
-                formated_grand_total: `${grandTotal.toFixed(2)} €`,
-                items: itemsWithPrices,
-             };
-          });
-          orders = [...formattedMockedOrders, ...orders];
-       }
-    }
-  } catch(e) {
-    console.error("Erreur parsing commandes mockées", e);
-  }
 
   const toggleOrder = (orderId) => {
     setExpandedOrders(prev => ({
@@ -201,9 +152,21 @@ export default function Orders() {
                               />
                             </div>
                             <div className="flex-grow min-w-0">
-                              <p className="font-bold text-sm text-gray-800 truncate">{item.name}</p>
-                              <p className="text-xs text-gray-500 font-medium">
-                                {item.qty_ordered} {item.qty_ordered > 1 ? 'unités' : 'unité'} • <span className="text-blue-600 font-bold">{item.formated_total || item.formated_price || (item.price * item.qty_ordered) + " €"}</span>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-bold text-sm text-gray-800 truncate">{item.name}</p>
+                                {item.hasPromo && (
+                                  <span className="px-1.5 py-0.5 bg-orange-100 text-orange-600 text-[10px] font-black rounded-full uppercase tracking-wider flex-shrink-0">Promo</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-500 font-medium mt-0.5">
+                                {item.qty_ordered} {item.qty_ordered > 1 ? 'unités' : 'unité'}
+                                {item.hasPromo && item.originalPrice > item.price && (
+                                  <span className="ml-1 line-through text-gray-400">{item.originalPrice.toFixed(2)} €</span>
+                                )}
+                                {' • '}
+                                <span className={item.hasPromo ? "text-orange-500 font-black" : "text-blue-600 font-bold"}>
+                                  {item.formated_total || item.formated_price || (item.price * item.qty_ordered) + " €"}
+                                </span>
                               </p>
                             </div>
                           </div>

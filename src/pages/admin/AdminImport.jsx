@@ -101,9 +101,21 @@ export default function AdminImport() {
 
                 const name = (row.name || row.nom || row.label || Object.values(row)[2] || "Produit sans nom").toString().trim();
                 const sku = (row.sku || row.ref || Object.values(row)[1] || `sku-${Date.now()}-${i}`).toString().trim();
-                const priceVal = (row.prix_vente || row.prix || row.price || Object.values(row)[4] || "0").toString();
-                const price = parseFloat(priceVal.replace(",", ".").replace(/[^0-9.]/g, "")) || 0;
+
+                // ✅ Priorité au prix promo s'il existe et est valide
+                const promoVal = (row.prix_promo || row.promo || "").toString().trim();
+                const promoPrice = promoVal ? parseFloat(promoVal.replace(",", ".").replace(/[^0-9.]/g, "")) || 0 : 0;
+                const regularVal = (row.prix_vente || row.prix || row.price || Object.values(row)[4] || "0").toString();
+                const regularPrice = parseFloat(regularVal.replace(",", ".").replace(/[^0-9.]/g, "")) || 0;
+                // Le prix effectif : promo si dispo, sinon prix vente
+                const price = promoPrice > 0 ? promoPrice : regularPrice;
+                const hasPromo = promoPrice > 0;
+
                 const qty = parseInt(row.stock_initial || row.stock || Object.values(row)[7] || 0);
+
+                if (sku && price > 0) {
+                    console.log(`📦 Produit lu: ${sku} → ${price} € ${hasPromo ? `(PROMO, prix normal: ${regularPrice} €)` : "(prix normal)"}`);
+                }
 
                 const urlKey = name.toLowerCase()
                     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -128,7 +140,6 @@ export default function AdminImport() {
                         console.log(`✓ Produit créé (ID: ${productId}).`);
                     } else if (createData.errors?.sku || createData.message?.includes("déjà")) {
                         console.log(`! SKU ${sku} existe déjà. Recherche de l'ID...`);
-                        // On cherche l'ID du produit existant
                         const searchRes = await fetch(`http://localhost:8008/api/v1/admin/catalog/products?sku=${sku}`, {
                             headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
                         });
@@ -139,6 +150,8 @@ export default function AdminImport() {
                     } else {
                         throw new Error(createData.message || "Erreur création");
                     }
+
+
 
                     // ÉTAPE 2 : MISE À JOUR DES ATTRIBUTS (NOM, PRIX, ETC.)
                     const updatePayload = {
@@ -173,10 +186,7 @@ export default function AdminImport() {
                         successCount++;
                         console.log(`✓ Produit ${sku} mis à jour avec succès !`);
 
-                        // Sauvegarder le prix dans le catalogue local (pour l'import de commandes)
-                        const catalog = JSON.parse(localStorage.getItem('product_catalog') || '{}');
-                        catalog[sku] = { price, name };
-                        localStorage.setItem('product_catalog', JSON.stringify(catalog));
+
                     } else {
                         console.error(`✗ Échec mise à jour ${sku}:`, updateData);
                     }
@@ -226,6 +236,11 @@ export default function AdminImport() {
                 const firstName = customer.first_name || customer.prenom || emailPrefix.split(".")[0] || "Client";
                 const lastName = customer.last_name || customer.nom || emailPrefix.split(".")[1] || "Inconnu";
                 const password = customer.password || customer.pwd || "password123";
+
+                // Sauvegarde du mot de passe pour pouvoir se connecter lors de l'import des commandes
+                const credentials = JSON.parse(localStorage.getItem('customer_credentials') || '{}');
+                credentials[email] = password.toString().trim();
+                localStorage.setItem('customer_credentials', JSON.stringify(credentials));
 
                 const payload = {
                     first_name: firstName.toString().trim(),
@@ -282,6 +297,8 @@ export default function AdminImport() {
         }
     };
 
+
+
     const importOrders = async (file) => {
         try {
             setLoading(true);
@@ -295,7 +312,6 @@ export default function AdminImport() {
             let successCount = 0;
             for (let i = 0; i < rows.length; i++) {
                 let row = rows[i];
-                // Support des formats tabulés ou point-virgule si PapaParse échoue à séparer les colonnes
                 const firstKey = Object.keys(row)[0];
                 if (firstKey && (firstKey.includes("\t") || firstKey.includes(";"))) {
                     const separator = firstKey.includes("\t") ? "\t" : ";";
@@ -318,65 +334,157 @@ export default function AdminImport() {
                     continue;
                 }
 
-                // Parsing du format spécifique {["sku";qty]}
+                // ✅ Parsing robuste du format {["sku";qty],["sku2";qty2]}
                 const parseItems = (str) => {
-                    const cleaned = str.replace(/[{}]/g, "");
+                    const cleaned = str.replace(/^\{|\}$/g, ""); // retire { et } extérieurs
                     const parts = cleaned.split("],");
                     return parts.map(p => {
-                        const inner = p.replace(/[\[\]]/g, "");
-                        const [sku, qty] = inner.split(";");
-                        return { sku: sku?.trim()?.replace(/["']/g, ""), qty: parseInt(qty) || 1 };
-                    }).filter(item => item.sku);
+                        const inner = p.replace(/[\[\]]/g, "").trim();
+                        const [skuRaw, qtyRaw] = inner.split(";");
+                        const sku = skuRaw?.trim()?.replace(/["']/g, "");
+                        const qty = parseInt(qtyRaw) || 1;
+                        return { sku, qty };
+                    }).filter(item => item.sku && item.sku.length > 0);
                 };
 
                 const items = parseItems(achatStr);
+                console.log(`📋 Commande ${email} — items parsés:`, items);
 
-                // Charger le catalogue de prix depuis le localStorage (rempli lors de l'import produits)
-                const catalog = JSON.parse(localStorage.getItem('product_catalog') || '{}');
-
-                // Calculer le total depuis le catalogue local
-                let grandTotal = 0;
                 const itemsWithPrices = items.map((item) => {
-                    const catalogEntry = catalog[item.sku];
-                    const price = catalogEntry?.price || 0;
-                    const name = catalogEntry?.name || `Produit (${item.sku})`;
-                    const lineTotal = price * item.qty;
-                    grandTotal += lineTotal;
-                    return { ...item, price, name, total: lineTotal };
+                    return { ...item };
                 });
 
-                console.log(`Prix calculés depuis le catalogue local:`, itemsWithPrices);
+                console.log(`📋 Commande ${email} — items:`, itemsWithPrices);
 
-                const payload = {
-                    customer_email: email,
-                    items: itemsWithPrices,
-                    status: statusStr,
-                    created_at: `${date} ${heure}`,
-                    grand_total: grandTotal,
-                    channel_id: 1,
-                    payment_method: "cashondelivery",
-                    shipping_method: "free_free"
-                };
+                // Récupération du mot de passe sauvegardé lors de l'import client
+                const credentials = JSON.parse(localStorage.getItem('customer_credentials') || '{}');
+                const userPassword = credentials[email] || "password123";
 
                 try {
-                    // L'API Bagisto ne supporte pas POST sur /orders (GET seulement).
-                    // On sauvegarde la commande dans le localStorage, liée à l'email du client,
-                    // pour qu'elle s'affiche dans sa page "Mes Commandes".
-                    const existingOrders = JSON.parse(localStorage.getItem('imported_orders') || '[]');
-                    // Éviter les doublons : vérifier si la même commande (même email + même date) existe déjà
-                    const isDuplicate = existingOrders.some(
-                        o => o.customer_email === payload.customer_email && o.created_at === payload.created_at
-                    );
-                    if (!isDuplicate) {
-                        existingOrders.push(payload);
-                        localStorage.setItem('imported_orders', JSON.stringify(existingOrders));
+                    console.log(` Tentative création via API pour ${email}`);
+
+                    // 1. Login as customer
+                    let loginRes = await fetch("http://localhost:8008/api/v1/customer/login", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                        body: JSON.stringify({ email: email, password: userPassword, device_name: "web" })
+                    });
+
+                    // Si le login échoue (ex: client n'existe pas), on tente de le créer à la volée !
+                    if (!loginRes.ok) {
+                        console.log(`⚠️ Client non trouvé ou mot de passe invalide pour ${email}. Tentative de création...`);
+                        const emailPrefix = email.split("@")[0];
+                        const firstName = emailPrefix.split(".")[0] || "Client";
+                        const lastName = emailPrefix.split(".")[1] || "Inconnu";
+                        
+                        const registerRes = await fetch("http://localhost:8008/api/v1/customer/register", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                            body: JSON.stringify({
+                                first_name: firstName,
+                                last_name: lastName,
+                                email: email,
+                                password: userPassword,
+                                password_confirmation: userPassword
+                            })
+                        });
+                        
+                        if (registerRes.ok) {
+                            console.log(`✓ Client ${email} créé avec succès ! Nouvel essai de login...`);
+                            // On retente le login
+                            loginRes = await fetch("http://localhost:8008/api/v1/customer/login", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json", "Accept": "application/json" },
+                                body: JSON.stringify({ email: email, password: userPassword, device_name: "web" })
+                            });
+                        } else {
+                            console.warn(`⚠️ Impossible de créer le client ${email}. Le mot de passe original est peut-être différent.`);
+                        }
                     }
-                    successCount++;
-                    console.log(`✓ Commande sauvegardée (total: ${grandTotal.toFixed(2)} €) pour ${email}`);
+
+                    if (loginRes.ok) {
+                        const { token } = await loginRes.json();
+                        
+                        // 2. Clear cart
+                        await fetch("http://localhost:8008/api/v1/customer/cart/empty", {
+                            method: "DELETE",
+                            headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": `Bearer ${token}` }
+                        });
+
+                        // 3. Add items to cart
+                        for (const item of itemsWithPrices) {
+                            let productId;
+                            // Find product ID via admin API
+                            const pRes = await fetch(`http://localhost:8008/api/v1/admin/catalog/products?sku=${item.sku}`, {
+                                headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
+                            });
+                            const pData = await pRes.json();
+                            productId = pData.data?.[0]?.id;
+
+                            if (productId) {
+                                await fetch(`http://localhost:8008/api/v1/customer/cart/add/${productId}`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": `Bearer ${token}` },
+                                    body: JSON.stringify({ quantity: item.qty, product_id: productId })
+                                });
+                            }
+                        }
+
+                        // 4. Addresses
+                        const nameParts = email.split('@')[0].split('.');
+                        const fName = nameParts[0] || "Client";
+                        const lName = nameParts[1] || "Import";
+                        const addressData = {
+                            billing: {
+                                first_name: fName, last_name: lName, email: email,
+                                address: ["Adresse Import"], city: "Paris", state: "IDF", postcode: "75000", country: "FR", phone: "0102030405",
+                                use_for_shipping: true
+                            },
+                            shipping: {
+                                first_name: fName, last_name: lName, email: email,
+                                address: ["Adresse Import"], city: "Paris", state: "IDF", postcode: "75000", country: "FR", phone: "0102030405"
+                            }
+                        };
+                        await fetch("http://localhost:8008/api/v1/customer/checkout/save-address", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": `Bearer ${token}` },
+                            body: JSON.stringify(addressData)
+                        });
+
+                        // 5. Shipping
+                        await fetch("http://localhost:8008/api/v1/customer/checkout/save-shipping", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": `Bearer ${token}` },
+                            body: JSON.stringify({ shipping_method: "free_free" })
+                        });
+
+                        // 6. Payment
+                        await fetch("http://localhost:8008/api/v1/customer/checkout/save-payment", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": `Bearer ${token}` },
+                            body: JSON.stringify({ payment: { method: "cashondelivery" } })
+                        });
+
+                        // 7. Place Order
+                        const orderRes = await fetch("http://localhost:8008/api/v1/customer/checkout/save-order", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": `Bearer ${token}` }
+                        });
+
+                        if (orderRes.ok) {
+                            console.log(`✓ Commande insérée dans l'API Bagisto pour ${email}`);
+                            successCount++;
+                        } else {
+                            console.warn(`⚠️ Échec insertion API Bagisto pour ${email}`);
+                        }
+                    } else {
+                        console.warn(`⚠️ Impossible de se connecter en tant que ${email} (mot de passe inconnu).`);
+                    }
                 } catch (e) {
                     console.error(`! Erreur inattendue pour ${email}:`, e);
                 }
             }
+
             setStatus({
                 type: successCount > 0 ? "success" : "error",
                 message: `${successCount}/${rows.length} commandes importées avec succès !`
@@ -492,12 +600,14 @@ export default function AdminImport() {
                             </div>
                             <div>
                                 <h2 className="text-2xl font-black text-gray-900">Import Commandes</h2>
-                                <p className="text-gray-500 text-sm">Format: date, heure, client, achat, status...</p>
+                                <p className="text-gray-500 text-sm">Format: date, heure, client, achat, status</p>
                             </div>
                         </div>
 
+
+
                         <label className="block">
-                            <span className="sr-only">Choisir un fichier</span>
+                            <span className="text-sm font-bold text-gray-700 block mb-2">Fichier de commandes</span>
                             <input
                                 type="file"
                                 accept=".csv,.txt"
