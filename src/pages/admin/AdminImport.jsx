@@ -491,6 +491,73 @@ export default function AdminImport() {
                             const bagistoOrderId = orderData.data?.order?.id || orderData.data?.id;
                             console.log(`✓ Commande insérée dans l'API Bagisto pour ${email} (ID: ${bagistoOrderId})`);
                             
+                            // ==============================================================================
+                            // SYNCHRONISATION DU STATUT DANS LE BACKEND OFFICIEL BAGISTO (INVOICE, SHIP, CANCEL)
+                            // ==============================================================================
+                            if (statusStr !== "pending") {
+                                try {
+                                    console.log(`🔄 Mise à jour du statut Bagisto vers : ${statusStr} pour la commande ${bagistoOrderId}`);
+                                    
+                                    // 1. Récupération de la commande admin pour avoir les ID internes des items
+                                    const adminOrderRes = await fetch(`http://localhost:8008/api/v1/admin/sales/orders/${bagistoOrderId}`, {
+                                        headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
+                                    });
+                                    if (adminOrderRes.ok) {
+                                        const adminOrderData = await adminOrderRes.json();
+                                        const fullOrder = adminOrderData.data || adminOrderData;
+
+                                        if (statusStr === "canceled") {
+                                            // Annulation
+                                            await fetch(`http://localhost:8008/api/v1/admin/sales/orders/${bagistoOrderId}/cancel`, {
+                                                method: "POST",
+                                                headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
+                                            });
+                                        } 
+                                        else if (statusStr === "completed" || statusStr === "processing") {
+                                            // Facturation (Invoice) requise pour processing ET completed
+                                            const invoiceItems = {};
+                                            fullOrder.items.forEach(item => { invoiceItems[item.id] = parseInt(item.qty_ordered); });
+                                            
+                                            await fetch(`http://localhost:8008/api/v1/admin/sales/invoices/${bagistoOrderId}`, {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` },
+                                                body: JSON.stringify({ invoice: { items: invoiceItems } })
+                                            });
+
+                                            // Expédition (Shipment) requise uniquement pour completed
+                                            if (statusStr === "completed") {
+                                                const itemsMap = {};
+                                                let totalQty = 0;
+                                                fullOrder.items.forEach(item => {
+                                                    const qty = parseInt(item.qty_ordered || 0);
+                                                    if (qty > 0) {
+                                                        itemsMap[item.id] = { "1": qty };
+                                                        totalQty += qty;
+                                                    }
+                                                });
+
+                                                await fetch(`http://localhost:8008/api/v1/admin/sales/shipments/${bagistoOrderId}`, {
+                                                    method: "POST",
+                                                    headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` },
+                                                    body: JSON.stringify({
+                                                        shipment: {
+                                                            carrier_title: "Service Livraison Import",
+                                                            track_number: "SHIP-IMP-" + bagistoOrderId,
+                                                            source: 1,
+                                                            total_qty: totalQty,
+                                                            items: itemsMap
+                                                        }
+                                                    })
+                                                });
+                                            }
+                                        }
+                                    }
+                                } catch (e) {
+                                    console.error(`Erreur de synchronisation du statut pour la commande ${bagistoOrderId}`, e);
+                                }
+                            }
+                            // ==============================================================================
+
                             // Sauvegarde des métadonnées (status, date, vrai total) pour l'affichage FrontOffice
                             const existingOrders = JSON.parse(localStorage.getItem('imported_orders_meta') || '[]');
                             existingOrders.push({
