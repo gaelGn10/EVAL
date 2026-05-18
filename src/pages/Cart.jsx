@@ -58,6 +58,32 @@ export default function Cart() {
   const handleUpdateQuantity = (itemId, newQty) => {
     if (newQty < 1) return;
 
+    const item = cartItems.find(i => i.id === itemId);
+    if (item && item.product) {
+      const product = item.product;
+      let stockQty = null;
+      if (product) {
+        if (product.inventories && Array.isArray(product.inventories) && product.inventories.length > 0) {
+          stockQty = parseInt(product.inventories[0].qty, 10);
+        } else if (product.invetory_indices && Array.isArray(product.invetory_indices) && product.invetory_indices.length > 0) {
+          stockQty = parseInt(product.invetory_indices[0].qty, 10);
+        } else if (product.qty !== undefined && product.qty !== null) {
+          stockQty = parseInt(product.qty, 10);
+        } else if (product.stock_qty !== undefined && product.stock_qty !== null) {
+          stockQty = parseInt(product.stock_qty, 10);
+        }
+      }
+      
+      const requestedQty = parseInt(newQty, 10);
+      
+      if (stockQty !== null && !isNaN(stockQty)) {
+        if (requestedQty > stockQty) {
+          alert(`Quantité maximale atteinte. Le stock disponible actuel pour ce produit est de ${stockQty} article(s).`);
+          return;
+        }
+      }
+    }
+
     // 1. Instant Optimistic UI Update
     const oldQty = localQuantities[itemId];
     setLocalQuantities(prev => ({ ...prev, [itemId]: newQty }));

@@ -17,6 +17,24 @@ export default function Wishlist() {
       return;
     }
 
+    let stockQty = null;
+    if (product) {
+      if (product.inventories && Array.isArray(product.inventories) && product.inventories.length > 0) {
+        stockQty = parseInt(product.inventories[0].qty, 10);
+      } else if (product.invetory_indices && Array.isArray(product.invetory_indices) && product.invetory_indices.length > 0) {
+        stockQty = parseInt(product.invetory_indices[0].qty, 10);
+      } else if (product.qty !== undefined && product.qty !== null) {
+        stockQty = parseInt(product.qty, 10);
+      } else if (product.stock_qty !== undefined && product.stock_qty !== null) {
+        stockQty = parseInt(product.stock_qty, 10);
+      }
+    }
+
+    if (stockQty !== null && !isNaN(stockQty) && stockQty <= 0) {
+      alert(`Ce produit est actuellement en rupture de stock et ne peut pas être ajouté au panier.`);
+      return;
+    }
+
     setAddingCartId(product.id);
 
     try {

@@ -64,6 +64,37 @@ function ProductCard({ product, navigate }) {
       return;
     }
 
+    let stockQty = null;
+    if (product) {
+      if (product.inventories && Array.isArray(product.inventories) && product.inventories.length > 0) {
+        stockQty = parseInt(product.inventories[0].qty, 10);
+      } else if (product.invetory_indices && Array.isArray(product.invetory_indices) && product.invetory_indices.length > 0) {
+        stockQty = parseInt(product.invetory_indices[0].qty, 10);
+      } else if (product.qty !== undefined && product.qty !== null) {
+        stockQty = parseInt(product.qty, 10);
+      } else if (product.stock_qty !== undefined && product.stock_qty !== null) {
+        stockQty = parseInt(product.stock_qty, 10);
+      }
+    }
+
+    const requestedQty = parseInt(quantity, 10);
+
+    console.log("Stock Validation Debug (List):", {
+      productName: product?.name,
+      productId: product?.id,
+      stockQty,
+      requestedQty,
+      inventories: product?.inventories,
+      invetory_indices: product?.invetory_indices
+    });
+
+    if (stockQty !== null && !isNaN(stockQty)) {
+      if (requestedQty > stockQty) {
+        alert(`Quantité non disponible. Seulement ${stockQty} article(s) sont disponibles en stock pour ce produit.`);
+        return;
+      }
+    }
+
     try {
       const response = await fetch(`http://localhost:8008/api/v1/customer/cart/add/${product.id}`,
         {
