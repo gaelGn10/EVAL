@@ -18,7 +18,7 @@ export default function AdminImport() {
             reader.onload = (e) => {
                 const text = e.target.result;
                 const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
-                
+
                 if (lines.length < 2) {
                     reject(new Error("Le fichier est vide ou mal formaté."));
                     return;
@@ -27,18 +27,18 @@ export default function AdminImport() {
                 // Détection automatique du séparateur : tabulation ou point-virgule ou virgule
                 const firstLine = lines[0];
                 const sep = firstLine.includes("\t") ? "\t"
-                          : firstLine.includes(";") ? ";"
-                          : ",";
+                    : firstLine.includes(";") ? ";"
+                        : ",";
 
                 const headers = firstLine.split(sep).map(h => h.trim().toLowerCase().replace(/\s+/g, ""));
-                
+
                 const data = [];
                 for (let i = 1; i < lines.length; i++) {
                     // On découpe uniquement sur le séparateur PRINCIPAL (tab/; /,)
                     // La colonne "achat" contient des ; internes qu'il ne faut PAS couper
                     const parts = splitRespectingBraces(lines[i], sep);
                     if (parts.length < 2) continue;
-                    
+
                     const row = {};
                     headers.forEach((h, idx) => {
                         row[h] = (parts[idx] || "").trim();
@@ -63,7 +63,7 @@ export default function AdminImport() {
             const ch = line[i];
             if (ch === "{") depth++;
             else if (ch === "}") depth--;
-            
+
             if (ch === sep && depth === 0) {
                 parts.push(current);
                 current = "";
@@ -262,7 +262,7 @@ export default function AdminImport() {
                         try {
                             const errorJson = JSON.parse(errorText);
                             errorMsg = errorJson.message || JSON.stringify(errorJson.errors);
-                            
+
                             // Si l'erreur est que l'email est déjà pris, on le compte comme un succès pour l'import
                             if (errorMsg.includes("already been taken") || errorMsg.includes("déjà pris")) {
                                 successCount++;
@@ -343,12 +343,12 @@ export default function AdminImport() {
                 // ✅ Calculer le total en récupérant le prix via l'API Admin
                 let grandTotal = 0;
                 const itemsWithPrices = [];
-                
+
                 for (const item of items) {
                     let pId = null;
                     let pPrice = 0;
                     let pName = `Produit (${item.sku})`;
-                    
+
                     try {
                         const pRes = await fetch(`http://localhost:8008/api/v1/admin/catalog/products?sku=${item.sku}`, {
                             headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
@@ -362,10 +362,10 @@ export default function AdminImport() {
                     } catch (e) {
                         console.error(`Erreur fetch produit ${item.sku}`, e);
                     }
-                    
+
                     const lineTotal = pPrice * item.qty;
                     grandTotal += lineTotal;
-                    
+
                     itemsWithPrices.push({
                         ...item,
                         id: pId,
@@ -397,7 +397,7 @@ export default function AdminImport() {
                         const emailPrefix = email.split("@")[0];
                         const firstName = emailPrefix.split(".")[0] || "Client";
                         const lastName = emailPrefix.split(".")[1] || "Inconnu";
-                        
+
                         const registerRes = await fetch("http://localhost:8008/api/v1/customer/register", {
                             method: "POST",
                             headers: { "Content-Type": "application/json", "Accept": "application/json" },
@@ -409,7 +409,7 @@ export default function AdminImport() {
                                 password_confirmation: userPassword
                             })
                         });
-                        
+
                         if (registerRes.ok) {
                             console.log(`✓ Client ${email} créé avec succès ! Nouvel essai de login...`);
                             // On retente le login
@@ -425,7 +425,7 @@ export default function AdminImport() {
 
                     if (loginRes.ok) {
                         const { token } = await loginRes.json();
-                        
+
                         // 2. Clear cart
                         await fetch("http://localhost:8008/api/v1/customer/cart/empty", {
                             method: "DELETE",
@@ -490,14 +490,14 @@ export default function AdminImport() {
                             const orderData = await orderRes.json();
                             const bagistoOrderId = orderData.data?.order?.id || orderData.data?.id;
                             console.log(`✓ Commande insérée dans l'API Bagisto pour ${email} (ID: ${bagistoOrderId})`);
-                            
+
                             // ==============================================================================
                             // SYNCHRONISATION DU STATUT DANS LE BACKEND OFFICIEL BAGISTO (INVOICE, SHIP, CANCEL)
                             // ==============================================================================
                             if (statusStr !== "pending") {
                                 try {
                                     console.log(`🔄 Mise à jour du statut Bagisto vers : ${statusStr} pour la commande ${bagistoOrderId}`);
-                                    
+
                                     // 1. Récupération de la commande admin pour avoir les ID internes des items
                                     const adminOrderRes = await fetch(`http://localhost:8008/api/v1/admin/sales/orders/${bagistoOrderId}`, {
                                         headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
@@ -512,12 +512,12 @@ export default function AdminImport() {
                                                 method: "POST",
                                                 headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
                                             });
-                                        } 
+                                        }
                                         else if (statusStr === "completed" || statusStr === "processing") {
                                             // Facturation (Invoice) requise pour processing ET completed
                                             const invoiceItems = {};
                                             fullOrder.items.forEach(item => { invoiceItems[item.id] = parseInt(item.qty_ordered); });
-                                            
+
                                             await fetch(`http://localhost:8008/api/v1/admin/sales/invoices/${bagistoOrderId}`, {
                                                 method: "POST",
                                                 headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` },
@@ -569,7 +569,7 @@ export default function AdminImport() {
                                 items: itemsWithPrices
                             });
                             localStorage.setItem('imported_orders_meta', JSON.stringify(existingOrders));
-                            
+
                             successCount++;
                         } else {
                             console.warn(`⚠️ Échec insertion API Bagisto pour ${email}`);
@@ -609,12 +609,12 @@ export default function AdminImport() {
             <main className="p-10 flex-grow max-w-4xl mx-auto w-full">
                 {status && (
                     <div className={`mb-8 p-4 rounded-2xl border flex items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-300 ${status.type === "success" ? "bg-green-50 border-green-100 text-green-700" :
-                            status.type === "error" ? "bg-red-50 border-red-100 text-red-700" :
-                                "bg-blue-50 border-blue-100 text-blue-700"
+                        status.type === "error" ? "bg-red-50 border-red-100 text-red-700" :
+                            "bg-blue-50 border-blue-100 text-blue-700"
                         }`}>
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${status.type === "success" ? "bg-green-100" :
-                                status.type === "error" ? "bg-red-100" :
-                                    "bg-blue-100"
+                            status.type === "error" ? "bg-red-100" :
+                                "bg-blue-100"
                             }`}>
                             {status.type === "success" ? "✓" : status.type === "error" ? "!" : "i"}
                         </div>
@@ -720,6 +720,27 @@ export default function AdminImport() {
                                 }}
                             />
                         </label>
+                    </div>
+
+                    <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                        <div className="flex items-center gap-6 mb-8">
+                            <div className="w-16 h-16 bg-pink-50 text-pink-600 rounded-2xl flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-black text-gray-900">Import Images</h2>
+                                <p className="text-gray-500 text-sm">Fichier ZIP via script JSX 100% Client</p>
+                            </div>
+                        </div>
+
+                        <Link
+                            to="/admin/import-image"
+                            className="block w-full text-center py-4 px-6 rounded-xl border-2 border-dashed border-pink-200 text-pink-600 font-bold hover:bg-pink-50 transition-all cursor-pointer"
+                        >
+                            Aller à la page d'import d'images →
+                        </Link>
                     </div>
                 </div>
             </main>

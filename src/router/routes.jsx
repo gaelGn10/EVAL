@@ -13,7 +13,7 @@ import AdminDashboard from "../pages/admin/AdminDashboard";
 import AdminResetData from "../pages/admin/AdminResetData";
 import AdminOrders from "../pages/admin/AdminOrders";
 import AdminImport from "../pages/admin/AdminImport";
-
+import AdminImportImage from "../pages/admin/AdminImportImage";
 
 const routes = [
   {
@@ -66,6 +66,13 @@ const routes = [
     path: "/admin/import",
     component: AdminImport,
     title: "Import Data",
+    private: true,
+    admin: true,
+  },
+  {
+    path: "/admin/import-image",
+    component: AdminImportImage,
+    title: "Import Images",
     private: true,
     admin: true,
   },

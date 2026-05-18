@@ -100,7 +100,7 @@ alert(error.message);
 
   return (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden flex flex-col hover:shadow-xl transition-all duration-300 border border-gray-100">
-      <Link to={`/product/${product.id}`} className="block relative h-48 overflow-hidden group">
+      <Link to={`/product/${product.id}`} className="block relative h-52 overflow-hidden group bg-gray-50 flex items-center justify-center p-4">
    <img
   src={
     product.images?.[0]?.path
@@ -109,9 +109,9 @@ alert(error.message);
       : "https://via.placeholder.com/300x300?text=Produit"
   }
   alt={product.name}
-  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+  className="max-w-full max-h-full w-auto h-auto object-contain group-hover:scale-105 transition-transform duration-500"
 />
-        <div className="absolute inset-0 bg-black/5 group-hover:bg-black/0 transition-colors" />
+        <div className="absolute inset-0 bg-black/5 group-hover:bg-black/0 transition-colors pointer-events-none" />
       </Link>
       
       <div className="p-4 flex flex-col flex-grow">

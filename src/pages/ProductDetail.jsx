@@ -83,17 +83,17 @@ export default function ProductDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start text-left">
           {/* Gallery Section */}
           <div className="space-y-4">
-            <div className="aspect-square bg-gray-50 rounded-3xl overflow-hidden border border-gray-100 shadow-inner group">
+            <div className="aspect-square bg-gray-50 rounded-[2.5rem] overflow-hidden border border-gray-100 shadow-inner group flex items-center justify-center p-8">
               <img
               src={
                product.images?.[0]?.path
     
                ? `${product.images[0].medium_image_url}`
              : "https://via.placeholder.com/300x300?text=Produit"
-                }
-                alt={product.name}
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-              />
+                 }
+                 alt={product.name}
+                 className="max-w-full max-h-full w-auto h-auto object-contain transition-transform duration-700 group-hover:scale-105"
+               />
             </div>
 
             {images.length > 1 && (
@@ -113,7 +113,7 @@ export default function ProductDetail() {
                     : "https://via.placeholder.com/300x300?text=Produit"
                         }
                         alt="" 
-                        className="w-full h-full object-cover" 
+                        className="w-full h-full object-contain p-2" 
                     />
                   </button>
                 ))}
