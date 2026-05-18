@@ -13,7 +13,7 @@ export default function ListCategories() {
       <h1 className="text-2xl font-bold mb-4">Liste des Categories</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {data?.data?.map((categorie) => (
+        {data?.data?.filter(cat => cat.id !== 1 && cat.id !== "1").map((categorie) => (
           <Link
             key={categorie.id}
             to={`/category/${categorie.id}/products`}

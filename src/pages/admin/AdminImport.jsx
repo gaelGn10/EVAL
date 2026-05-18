@@ -241,7 +241,7 @@ export default function AdminImport() {
                         short_description: name,
                         description: name,
                         channels: [1],
-                        categories: categoryId ? [1, categoryId] : [1],
+                        categories: categoryId ? [categoryId] : [1],
                         locales: ["fr", "en"],
                         fr: { name, url_key: urlKey, description: name, short_description: name },
                         en: { name, url_key: urlKey, description: name, short_description: name },
