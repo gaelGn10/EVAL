@@ -82,6 +82,20 @@ export default function AdminImport() {
             const rawData = await parseFile(file);
             if (!rawData || rawData.length === 0) throw new Error("Fichier vide");
 
+            // Charger le cache des catégories existantes
+            let existingCategories = [];
+            try {
+                const catRes = await fetch("http://localhost:8008/api/v1/admin/catalog/categories?limit=100", {
+                    headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
+                });
+                if (catRes.ok) {
+                    const catData = await catRes.json();
+                    existingCategories = catData?.data || [];
+                }
+            } catch (e) {
+                console.error("Impossible de charger le cache des catégories", e);
+            }
+
             // 1. Validation : Nom de colonne non conforme
             const headers = Object.keys(rawData[0] || {});
             const hasSkuHeader = headers.some(h => ["sku", "ref"].includes(h));
@@ -134,6 +148,52 @@ export default function AdminImport() {
                     console.log(`📦 Produit lu: ${sku} → ${price} € ${hasPromo ? `(PROMO, prix normal: ${regularPrice} €)` : "(prix normal)"}`);
                 }
 
+                // Détermination de la catégorie
+                const categoryName = (row.categorie || row.category || row.class || row.type_produit || "").toString().trim();
+                let categoryId = null;
+
+                if (categoryName) {
+                    const matchedCat = existingCategories.find(c => c.name?.toLowerCase() === categoryName.toLowerCase());
+                    if (matchedCat) {
+                        categoryId = matchedCat.id;
+                    } else {
+                        // Créer la catégorie dynamiquement
+                        try {
+                            const catSlug = categoryName.toLowerCase()
+                                .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                                .replace(/[^a-z0-9]+/g, "-")
+                                .replace(/(^-|-$)+/g, "");
+
+                            const catPayload = {
+                                position: 1,
+                                status: 1,
+                                parent_id: 1,
+                                locales: ["fr", "en"],
+                                fr: { name: categoryName, slug: catSlug, description: categoryName, meta_title: categoryName },
+                                en: { name: categoryName, slug: catSlug, description: categoryName, meta_title: categoryName }
+                            };
+
+                            console.log(`Création de la catégorie: ${categoryName}...`);
+                            const newCatRes = await fetch("http://localhost:8008/api/v1/admin/catalog/categories", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` },
+                                body: JSON.stringify(catPayload)
+                            });
+
+                            if (newCatRes.ok) {
+                                const newCatData = await newCatRes.json();
+                                categoryId = newCatData.data.id;
+                                console.log(`✓ Catégorie créée: ${categoryName} (ID: ${categoryId})`);
+                                existingCategories.push(newCatData.data);
+                            } else {
+                                console.error(`✗ Erreur création catégorie ${categoryName}:`, await newCatRes.text());
+                            }
+                        } catch (err) {
+                            console.error("Erreur création catégorie", err);
+                        }
+                    }
+                }
+
                 const urlKey = name.toLowerCase()
                     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
                     .replace(/[^a-z0-9]+/g, "-")
@@ -181,7 +241,7 @@ export default function AdminImport() {
                         short_description: name,
                         description: name,
                         channels: [1],
-                        categories: [1],
+                        categories: categoryId ? [1, categoryId] : [1],
                         locales: ["fr", "en"],
                         fr: { name, url_key: urlKey, description: name, short_description: name },
                         en: { name, url_key: urlKey, description: name, short_description: name },

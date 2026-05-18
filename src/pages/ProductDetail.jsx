@@ -79,6 +79,46 @@ export default function ProductDetail() {
     }
   };
   const product = data?.data;
+
+  let stockQty = null;
+  if (product) {
+    if (product.inventories && Array.isArray(product.inventories) && product.inventories.length > 0) {
+      stockQty = parseInt(product.inventories[0].qty, 10);
+    } else if (product.invetory_indices && Array.isArray(product.invetory_indices) && product.invetory_indices.length > 0) {
+      stockQty = parseInt(product.invetory_indices[0].qty, 10);
+    } else if (product.qty !== undefined && product.qty !== null) {
+      stockQty = parseInt(product.qty, 10);
+    } else if (product.stock_qty !== undefined && product.stock_qty !== null) {
+      stockQty = parseInt(product.stock_qty, 10);
+    }
+  }
+
+  let stockBadge = null;
+  if (stockQty !== null && !isNaN(stockQty)) {
+    if (stockQty <= 0) {
+      stockBadge = (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-700 text-xs font-black border border-red-100 rounded-full uppercase tracking-wider">
+          <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+          Rupture de stock
+        </span>
+      );
+    } else if (stockQty <= 5) {
+      stockBadge = (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 text-xs font-black border border-amber-100 rounded-full uppercase tracking-wider">
+          <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
+          Stock limité : plus que {stockQty} articles !
+        </span>
+      );
+    } else {
+      stockBadge = (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 text-xs font-black border border-green-100 rounded-full uppercase tracking-wider">
+          <span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span>
+          En Stock ({stockQty} disponibles)
+        </span>
+      );
+    }
+  }
+
   const images = product?.images?.length > 0 ? product.images : [{ url: "https://via.placeholder.com/600x600?text=Produit" }];
 
   return (
@@ -170,10 +210,11 @@ export default function ProductDetail() {
                 {product.name}
               </h1>
 
-              <div className="flex items-baseline gap-4 mb-8">
+              <div className="flex items-center flex-wrap gap-4 mb-8">
                 <span className="text-4xl font-bold text-blue-600">
                   {product.formated_price || `${product.price} €`}
                 </span>
+                {stockBadge}
               </div>
 
               <div className="prose prose-blue max-w-none text-gray-600 mb-10 leading-relaxed">
@@ -200,13 +241,24 @@ export default function ProductDetail() {
                 </div>
 
                 <button
+                  disabled={stockQty !== null && !isNaN(stockQty) && stockQty <= 0}
                   onClick={handleAddToCart}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-2xl transition-all shadow-xl shadow-blue-200 hover:shadow-blue-300 active:scale-[0.98] flex items-center justify-center gap-3 group"
+                  className={`flex-1 font-bold py-4 px-8 rounded-2xl transition-all flex items-center justify-center gap-3 group ${
+                    stockQty !== null && !isNaN(stockQty) && stockQty <= 0
+                      ? "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"
+                      : "bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-200 hover:shadow-blue-300 active:scale-[0.98]"
+                  }`}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  AJOUTER AU PANIER
+                  {stockQty !== null && !isNaN(stockQty) && stockQty <= 0 ? (
+                    "RUPTURE DE STOCK"
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      AJOUTER AU PANIER
+                    </>
+                  )}
                 </button>
               </div>
             </div>

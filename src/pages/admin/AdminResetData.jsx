@@ -89,6 +89,55 @@ export default function AdminResetData() {
                 return { deleted, softDeletedIds };
             };
 
+            const deleteCategories = async () => {
+                let deletedCount = 0;
+                try {
+                    const res = await fetch("http://localhost:8008/api/v1/admin/catalog/categories?limit=100", {
+                        headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
+                    });
+                    if (!res.ok) return 0;
+                    const data = await res.json();
+                    if (!data.data || data.data.length === 0) return 0;
+
+                    // Exclure la catégorie Racine (id = 1)
+                    const toDelete = data.data.filter(cat => cat.id !== 1 && cat.id !== "1");
+                    
+                    for (const cat of toDelete) {
+                        setProgress({ current: deletedCount, total: toDelete.length, type: `Suppression Catégorie: ${cat.name}` });
+                        try {
+                            let delRes = await fetch(`http://localhost:8008/api/v1/admin/catalog/categories/${cat.id}`, {
+                                method: "POST",
+                                headers: { 
+                                    "Content-Type": "application/json", 
+                                    "Accept": "application/json", 
+                                    "Authorization": `Bearer ${TOKEN}` 
+                                },
+                                body: JSON.stringify({ _method: "DELETE" })
+                            });
+
+                            if (!delRes.ok) {
+                                delRes = await fetch(`http://localhost:8008/api/v1/admin/catalog/categories/${cat.id}`, {
+                                    method: "DELETE",
+                                    headers: { 
+                                        "Accept": "application/json", 
+                                        "Authorization": `Bearer ${TOKEN}` 
+                                    }
+                                });
+                            }
+
+                            if (delRes.ok) {
+                                deletedCount++;
+                            }
+                        } catch (e) {
+                            console.error(e);
+                        }
+                    }
+                } catch (err) {
+                    console.error(err);
+                }
+                return deletedCount;
+            };
+
             const oldDeletedOrders = JSON.parse(localStorage.getItem('deleted_order_ids') || '[]');
 
             // On utilise le script backend custom pour purger la base de données de force (contourne les interdictions de l'API REST)
@@ -100,6 +149,7 @@ export default function AdminResetData() {
 
             // On peut garder la suppression API pour les produits et clients si besoin
             const productsResult = await deleteItems("Produit", "http://localhost:8008/api/v1/admin/catalog/products");
+            const categoriesDeleted = await deleteCategories();
             const customersResult = await deleteItems("Client", "http://localhost:8008/api/v1/admin/customers");
 
             localStorage.clear();
@@ -110,7 +160,7 @@ export default function AdminResetData() {
 
             setStatus({ 
                 type: "success", 
-                message: `Base Bagisto parfaitement nettoyée (Commandes purgées) ! ${productsResult.deleted} produits et ${customersResult.deleted} clients supprimés.` 
+                message: `Base Bagisto parfaitement nettoyée ! Produits, clients, catégories et commandes purgés (${productsResult.deleted} produits, ${categoriesDeleted} catégories et ${customersResult.deleted} clients supprimés).` 
             });
             showSuccess();
 

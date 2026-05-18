@@ -369,6 +369,84 @@ export default function AdminStock() {
                         })}
                     </div>
                 )}
+
+                {/* Section Tableau Récapitulatif du Stock Final */}
+                {!loading && !error && filteredProducts.length > 0 && (
+                    <div className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm mt-12 overflow-hidden">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                            <div>
+                                <h2 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    Tableau du Stock Final
+                                </h2>
+                                <p className="text-gray-500 font-semibold text-sm">Vue globale et statuts des stocks finaux après modifications</p>
+                            </div>
+                            
+                            <span className="bg-gray-100 text-gray-600 text-xs font-black px-4 py-2 rounded-xl">
+                                {filteredProducts.length} Produits affichés
+                            </span>
+                        </div>
+
+                        <div className="overflow-x-auto rounded-2xl border border-gray-100">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="bg-gray-50 text-gray-400 text-xs font-black uppercase tracking-wider border-b border-gray-100">
+                                        <th className="p-5">SKU</th>
+                                        <th className="p-5">Produit</th>
+                                        <th className="p-5 text-right">Prix</th>
+                                        <th className="p-5 text-center">Stock Actuel</th>
+                                        <th className="p-5 text-center">Stock Final</th>
+                                        <th className="p-5 text-center">Statut Final</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    {filteredProducts.map(p => {
+                                        const currentStock = p.inventories?.[0]?.qty ?? p.qty ?? 0;
+                                        const finalStock = localStocks[p.id] ?? currentStock;
+                                        
+                                        let statusBadge = "bg-green-50 text-green-700 border-green-100";
+                                        let statusText = "Disponible";
+                                        if (finalStock <= 0) {
+                                            statusBadge = "bg-red-50 text-red-700 border-red-100";
+                                            statusText = "Rupture";
+                                        } else if (finalStock <= 5) {
+                                            statusBadge = "bg-amber-50 text-amber-700 border-amber-100";
+                                            statusText = "Stock Faible";
+                                        }
+
+                                        return (
+                                            <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
+                                                <td className="p-5 font-mono text-xs text-gray-400 font-bold">{p.sku}</td>
+                                                <td className="p-5">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center p-1 border border-gray-100 overflow-hidden flex-shrink-0">
+                                                            <img 
+                                                                src={p.images?.[0]?.path ? p.images[0].medium_image_url : "https://via.placeholder.com/100?text=P"} 
+                                                                alt={p.name} 
+                                                                className="max-w-full max-h-full object-contain"
+                                                            />
+                                                        </div>
+                                                        <span className="font-bold text-gray-900 line-clamp-1">{p.name}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-5 text-right font-bold text-gray-900">{parseFloat(p.price).toFixed(2)} €</td>
+                                                <td className="p-5 text-center text-gray-500 font-semibold">{currentStock}</td>
+                                                <td className="p-5 text-center font-black text-blue-600 bg-blue-50/20">{finalStock}</td>
+                                                <td className="p-5 text-center">
+                                                    <span className={`inline-block border px-3 py-1 rounded-full text-[10px] font-black uppercase ${statusBadge}`}>
+                                                        {statusText}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
             </main>
         </div>
     );
