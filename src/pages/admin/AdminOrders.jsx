@@ -17,7 +17,27 @@ export default function AdminOrders() {
             });
             const result = await response.json();
             if (!response.ok) throw new Error(result.message || "Erreur API");
-            setOrders(result.data || []);
+            
+            let ordersData = result.data || [];
+
+            // MOCK OVERLAY: Surcharge les données Bagisto avec les statuts du fichier importé
+            try {
+                const metaStr = localStorage.getItem('imported_orders_meta');
+                if (metaStr && ordersData.length > 0) {
+                    const metas = JSON.parse(metaStr);
+                    ordersData = ordersData.map(order => {
+                        const meta = metas.find(m => m.bagisto_order_id && String(m.bagisto_order_id) === String(order.id));
+                        if (meta) {
+                            return { ...order, status: meta.status || order.status };
+                        }
+                        return order;
+                    });
+                }
+            } catch (e) {
+                console.error("Erreur de surcharge des statuts admin", e);
+            }
+
+            setOrders(ordersData);
         } catch (err) {
             setError(err.message);
         } finally {
@@ -96,6 +116,8 @@ export default function AdminOrders() {
         }
     };
 
+    const filteredOrders = orders.filter(order => order.status?.toLowerCase() !== 'canceled');
+
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
             <header className="bg-gray-900 text-white p-6 flex justify-between items-center shadow-lg">
@@ -108,9 +130,19 @@ export default function AdminOrders() {
             <main className="max-w-5xl mx-auto w-full p-8">
                 {loading ? (
                     <div className="text-center py-20 animate-pulse font-bold text-gray-400 text-2xl uppercase">Chargement...</div>
+                ) : filteredOrders.length === 0 ? (
+                    <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-16 flex flex-col items-center justify-center text-center">
+                        <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 mb-6 border border-gray-100">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                            </svg>
+                        </div>
+                        <h3 className="text-3xl font-black text-gray-900 mb-3">Aucune commande</h3>
+                        <p className="text-gray-500 font-medium text-lg">Il n'y a pas de commandes actives à gérer pour le moment.</p>
+                    </div>
                 ) : (
                     <div className="grid gap-6">
-                        {orders.map((order) => (
+                        {filteredOrders.map((order) => (
                             <div key={order.id} className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-8 flex flex-col md:flex-row items-center gap-8 hover:shadow-md transition-shadow">
                                 <div className="flex-shrink-0 text-center md:text-left">
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">ID Commande</p>

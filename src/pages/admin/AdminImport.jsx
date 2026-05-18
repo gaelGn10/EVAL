@@ -88,14 +88,6 @@ export default function AdminImport() {
             let successCount = 0;
             for (let i = 0; i < rawData.length; i++) {
                 let row = rawData[i];
-                const firstKey = Object.keys(row)[0];
-                if (firstKey && (firstKey.includes("\t") || firstKey.includes(";"))) {
-                    const separator = firstKey.includes("\t") ? "\t" : ";";
-                    const headers = firstKey.split(separator);
-                    const values = Object.values(row)[0].split(separator);
-                    row = {};
-                    headers.forEach((h, idx) => { row[h.trim().toLowerCase().replace(/\s+/g, "")] = values[idx]; });
-                }
 
                 setProgress(prev => ({ ...prev, current: i + 1 }));
 
@@ -312,31 +304,29 @@ export default function AdminImport() {
             let successCount = 0;
             for (let i = 0; i < rows.length; i++) {
                 let row = rows[i];
-                const firstKey = Object.keys(row)[0];
-                if (firstKey && (firstKey.includes("\t") || firstKey.includes(";"))) {
-                    const separator = firstKey.includes("\t") ? "\t" : ";";
-                    const headers = firstKey.split(separator);
-                    const values = Object.values(row)[0].split(separator);
-                    row = {};
-                    headers.forEach((h, idx) => { row[h.trim().toLowerCase().replace(/\s+/g, "")] = values[idx]; });
-                }
 
                 setProgress(prev => ({ ...prev, current: i + 1 }));
 
                 const email = (row.client || row.email || Object.values(row)[2] || "").toString().trim();
-                const achatStr = (row.achat || row.produits || Object.values(row)[3] || "").toString().trim();
+                const achatStr = (row.achat || row.achats || row.produits || Object.values(row)[3] || "").toString().trim();
                 const date = (row.date || Object.values(row)[0] || "").toString().trim();
                 const heure = (row.heure || Object.values(row)[1] || "").toString().trim();
-                const statusStr = (row.status || row.etat || Object.values(row)[4] || "pending").toString().trim();
+                const statusRaw = (row.status || row.statut || row.etat || row["état"] || Object.values(row)[4] || "pending").toString().trim().toLowerCase();
+                let statusStr = "pending";
+                if (statusRaw.includes("cours") || statusRaw.includes("traitement") || statusRaw.includes("processing")) statusStr = "processing";
+                else if (statusRaw.includes("livré") || statusRaw.includes("terminé") || statusRaw.includes("completed")) statusStr = "completed";
+                else if (statusRaw.includes("annul") || statusRaw.includes("cancel")) statusStr = "canceled";
+                else if (statusRaw.includes("attente") || statusRaw.includes("pending")) statusStr = "pending";
+                else statusStr = statusRaw; // fallback
 
                 if (!email || !achatStr) {
                     console.warn(`Ligne ${i + 1} sautée : données manquantes`, row);
                     continue;
                 }
 
-                // ✅ Parsing robuste du format {["sku";qty],["sku2";qty2]}
+                // ✅ Parsing robuste du format {["sku";qty],["sku2";qty2]} ou "{["sku";qty]}"
                 const parseItems = (str) => {
-                    const cleaned = str.replace(/^\{|\}$/g, ""); // retire { et } extérieurs
+                    const cleaned = str.replace(/[\{\}]/g, ""); // retire TOUTES les accolades (même s'il y a des guillemets autour)
                     const parts = cleaned.split("],");
                     return parts.map(p => {
                         const inner = p.replace(/[\[\]]/g, "").trim();
@@ -350,11 +340,42 @@ export default function AdminImport() {
                 const items = parseItems(achatStr);
                 console.log(`📋 Commande ${email} — items parsés:`, items);
 
-                const itemsWithPrices = items.map((item) => {
-                    return { ...item };
-                });
+                // ✅ Calculer le total en récupérant le prix via l'API Admin
+                let grandTotal = 0;
+                const itemsWithPrices = [];
+                
+                for (const item of items) {
+                    let pId = null;
+                    let pPrice = 0;
+                    let pName = `Produit (${item.sku})`;
+                    
+                    try {
+                        const pRes = await fetch(`http://localhost:8008/api/v1/admin/catalog/products?sku=${item.sku}`, {
+                            headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
+                        });
+                        const pData = await pRes.json();
+                        if (pData.data && pData.data.length > 0) {
+                            pId = pData.data[0].id;
+                            pPrice = parseFloat(pData.data[0].price) || 0;
+                            pName = pData.data[0].name || pName;
+                        }
+                    } catch (e) {
+                        console.error(`Erreur fetch produit ${item.sku}`, e);
+                    }
+                    
+                    const lineTotal = pPrice * item.qty;
+                    grandTotal += lineTotal;
+                    
+                    itemsWithPrices.push({
+                        ...item,
+                        id: pId,
+                        price: pPrice,
+                        name: pName,
+                        total: lineTotal
+                    });
+                }
 
-                console.log(`📋 Commande ${email} — items:`, itemsWithPrices);
+                console.log(`📋 Commande ${email} — total: ${grandTotal}€, items:`, itemsWithPrices);
 
                 // Récupération du mot de passe sauvegardé lors de l'import client
                 const credentials = JSON.parse(localStorage.getItem('customer_credentials') || '{}');
@@ -413,20 +434,14 @@ export default function AdminImport() {
 
                         // 3. Add items to cart
                         for (const item of itemsWithPrices) {
-                            let productId;
-                            // Find product ID via admin API
-                            const pRes = await fetch(`http://localhost:8008/api/v1/admin/catalog/products?sku=${item.sku}`, {
-                                headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
-                            });
-                            const pData = await pRes.json();
-                            productId = pData.data?.[0]?.id;
-
-                            if (productId) {
-                                await fetch(`http://localhost:8008/api/v1/customer/cart/add/${productId}`, {
+                            if (item.id) {
+                                await fetch(`http://localhost:8008/api/v1/customer/cart/add/${item.id}`, {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": `Bearer ${token}` },
-                                    body: JSON.stringify({ quantity: item.qty, product_id: productId })
+                                    body: JSON.stringify({ quantity: item.qty, product_id: item.id })
                                 });
+                            } else {
+                                console.warn(`⚠️ Produit ignoré (SKU inconnu): ${item.sku}`);
                             }
                         }
 
@@ -472,7 +487,22 @@ export default function AdminImport() {
                         });
 
                         if (orderRes.ok) {
-                            console.log(`✓ Commande insérée dans l'API Bagisto pour ${email}`);
+                            const orderData = await orderRes.json();
+                            const bagistoOrderId = orderData.data?.order?.id || orderData.data?.id;
+                            console.log(`✓ Commande insérée dans l'API Bagisto pour ${email} (ID: ${bagistoOrderId})`);
+                            
+                            // Sauvegarde des métadonnées (status, date, vrai total) pour l'affichage FrontOffice
+                            const existingOrders = JSON.parse(localStorage.getItem('imported_orders_meta') || '[]');
+                            existingOrders.push({
+                                bagisto_order_id: bagistoOrderId,
+                                customer_email: email,
+                                status: statusStr,
+                                created_at: `${date} ${heure}`,
+                                grand_total: grandTotal,
+                                items: itemsWithPrices
+                            });
+                            localStorage.setItem('imported_orders_meta', JSON.stringify(existingOrders));
+                            
                             successCount++;
                         } else {
                             console.warn(`⚠️ Échec insertion API Bagisto pour ${email}`);

@@ -9,9 +9,50 @@ export default function Orders() {
   const [expandedOrders, setExpandedOrders] = useState({});
   const { user } = useAuth();
 
-  let orders = data?.data || [];
+  let orders = data?.data ? [...data.data] : [];
 
-
+  // MOCK OVERLAY: Surcharge les données Bagisto avec les vraies données du fichier importé (status, date, prix)
+  try {
+    const metaStr = localStorage.getItem('imported_orders_meta');
+    if (metaStr && orders.length > 0) {
+      const metas = JSON.parse(metaStr);
+      
+      orders = orders.map(order => {
+        // Chercher si cette commande Bagisto correspond à un import (sécurité sur les types string/number)
+        const meta = metas.find(m => m.bagisto_order_id && String(m.bagisto_order_id) === String(order.id));
+        if (meta) {
+          return {
+            ...order,
+            status: meta.status || order.status,
+            created_at: meta.created_at 
+                ? new Date(meta.created_at.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1')).toISOString() 
+                : order.created_at,
+            grand_total: meta.grand_total,
+            formated_grand_total: `${meta.grand_total.toFixed(2)} €`,
+            items: (order.items || []).map(apiItem => {
+                const metaItem = meta.items.find(mi => mi.id && String(mi.id) === String(apiItem.product_id));
+                if (metaItem) {
+                    return {
+                        ...apiItem,
+                        formated_total: `${metaItem.total.toFixed(2)} €`,
+                        formated_price: `${metaItem.price.toFixed(2)} €`,
+                        total: metaItem.total,
+                        price: metaItem.price
+                    };
+                }
+                return apiItem;
+            })
+          };
+        }
+        return order;
+      });
+      
+      // Trier par date décroissante pour un affichage cohérent
+      orders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }
+  } catch(e) {
+    console.error("Erreur lors de la surcharge des commandes avec les métadonnées de l'import:", e);
+  }
 
   const toggleOrder = (orderId) => {
     setExpandedOrders(prev => ({
