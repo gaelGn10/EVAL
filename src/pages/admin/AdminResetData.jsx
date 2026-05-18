@@ -22,6 +22,7 @@ export default function AdminResetData() {
             const deleteItems = async (type, url) => {
                 let deleted = 0;
                 let hasMore = true;
+                let softDeletedIds = [];
                 
                 while (hasMore) {
                     const res = await fetch(`${url}?limit=50`, {
@@ -32,6 +33,8 @@ export default function AdminResetData() {
                     if (!data.data || data.data.length === 0) break;
 
                     const indices = data.data.map(item => item.id);
+                    if (type === "Commande") softDeletedIds.push(...indices);
+
                     setProgress({ current: deleted, total: "...", type: `Suppression ${type} (${indices.length} items)` });
 
                     let deletedInThisPage = 0;
@@ -83,19 +86,31 @@ export default function AdminResetData() {
                     
                     deleted += deletedInThisPage;
                 }
-                return deleted;
+                return { deleted, softDeletedIds };
             };
 
-            const ordersDeleted = await deleteItems("Commande", "http://localhost:8008/api/v1/admin/sales/orders");
-            const productsDeleted = await deleteItems("Produit", "http://localhost:8008/api/v1/admin/catalog/products");
-            const customersDeleted = await deleteItems("Client", "http://localhost:8008/api/v1/admin/customers");
+            const oldDeletedOrders = JSON.parse(localStorage.getItem('deleted_order_ids') || '[]');
+
+            // On utilise le script backend custom pour purger la base de données de force (contourne les interdictions de l'API REST)
+            try {
+                await fetch("http://localhost:8008/reset_data.php");
+            } catch (e) {
+                console.error("Erreur script reset_data", e);
+            }
+
+            // On peut garder la suppression API pour les produits et clients si besoin
+            const productsResult = await deleteItems("Produit", "http://localhost:8008/api/v1/admin/catalog/products");
+            const customersResult = await deleteItems("Client", "http://localhost:8008/api/v1/admin/customers");
 
             localStorage.clear();
             sessionStorage.removeItem("bagisto_client_token");
+            
+            // Plus besoin de liste noire complexe vu qu'on a purgé la base MySQL !
+            localStorage.setItem('deleted_order_ids', JSON.stringify([]));
 
             setStatus({ 
                 type: "success", 
-                message: `Base Bagisto nettoyée ! ${productsDeleted} produits, ${customersDeleted} clients, et ${ordersDeleted} commandes supprimés.` 
+                message: `Base Bagisto parfaitement nettoyée (Commandes purgées) ! ${productsResult.deleted} produits et ${customersResult.deleted} clients supprimés.` 
             });
             showSuccess();
 

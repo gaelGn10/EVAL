@@ -50,6 +50,12 @@ export default function Orders() {
       // Trier par date décroissante pour un affichage cohérent
       orders.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     }
+    // Cacher les commandes qui ont été "soft-delete" (blackliste d'IDs)
+    const deletedOrders = JSON.parse(localStorage.getItem('deleted_order_ids') || '[]');
+    if (deletedOrders.length > 0) {
+        orders = orders.filter(order => !deletedOrders.includes(order.id));
+    }
+    
   } catch(e) {
     console.error("Erreur lors de la surcharge des commandes avec les métadonnées de l'import:", e);
   }

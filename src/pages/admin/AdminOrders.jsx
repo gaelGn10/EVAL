@@ -107,6 +107,25 @@ export default function AdminOrders() {
             const result = await response.json();
             if (!response.ok) throw new Error(result.message || "L'action a échoué sur le serveur");
 
+            // Mettre à jour le statut dans l'overlay React pour que l'affichage suive l'action
+            try {
+                const metaStr = localStorage.getItem('imported_orders_meta');
+                let metas = metaStr ? JSON.parse(metaStr) : [];
+                const metaIndex = metas.findIndex(m => String(m.bagisto_order_id) === String(order.id));
+                
+                if (metaIndex !== -1) {
+                    metas[metaIndex].status = action === 'invoice' ? 'processing' : 'completed';
+                } else {
+                    metas.push({
+                        bagisto_order_id: order.id,
+                        status: action === 'invoice' ? 'processing' : 'completed'
+                    });
+                }
+                localStorage.setItem('imported_orders_meta', JSON.stringify(metas));
+            } catch (e) {
+                console.error("Erreur mise à jour overlay local", e);
+            }
+
             alert("Opération réussie !");
             fetchOrders();
         } catch (err) {
@@ -116,7 +135,13 @@ export default function AdminOrders() {
         }
     };
 
-    const filteredOrders = orders.filter(order => order.status?.toLowerCase() !== 'canceled');
+    const deletedOrders = JSON.parse(localStorage.getItem('deleted_order_ids') || '[]');
+
+    const filteredOrders = orders.filter(order => {
+        if (order.status?.toLowerCase() === 'canceled') return false;
+        if (deletedOrders.includes(order.id)) return false;
+        return true;
+    });
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
@@ -147,7 +172,35 @@ export default function AdminOrders() {
                                 <div className="flex-shrink-0 text-center md:text-left">
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">ID Commande</p>
                                     <h3 className="text-3xl font-black text-gray-900">#{order.increment_id || order.id}</h3>
-                                    <span className="text-[10px] font-black bg-blue-600 text-white px-3 py-1 rounded-full uppercase mt-2 inline-block">{order.status}</span>
+                                    
+                                    {(() => {
+                                        let badgeColor = "bg-gray-100 text-gray-700";
+                                        let badgeLabel = order.status;
+                                        
+                                        switch(order.status?.toLowerCase()) {
+                                            case "pending": 
+                                                badgeColor = "bg-amber-100 text-amber-700"; 
+                                                badgeLabel = "En attente"; 
+                                                break;
+                                            case "processing": 
+                                                badgeColor = "bg-blue-100 text-blue-700"; 
+                                                badgeLabel = "En cours"; 
+                                                break;
+                                            case "completed": 
+                                                badgeColor = "bg-green-100 text-green-700"; 
+                                                badgeLabel = "Terminée"; 
+                                                break;
+                                            case "canceled": 
+                                                badgeColor = "bg-red-100 text-red-700"; 
+                                                badgeLabel = "Annulée"; 
+                                                break;
+                                        }
+                                        return (
+                                            <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase mt-2 inline-block ${badgeColor}`}>
+                                                {badgeLabel}
+                                            </span>
+                                        );
+                                    })()}
                                 </div>
 
                                 <div className="flex-grow">
@@ -157,17 +210,28 @@ export default function AdminOrders() {
                                 </div>
 
                                 <div className="flex gap-3">
+                                    {/* On ne peut facturer que si c'est en attente (pending) */}
                                     <button
-                                        disabled={processingId === `${order.id}-invoice` || order.status === 'completed'}
+                                        disabled={processingId === `${order.id}-invoice` || order.status !== 'pending'}
                                         onClick={() => handleAction(order, "invoice")}
-                                        className="bg-green-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-green-700 disabled:opacity-20"
+                                        className={`px-6 py-3 rounded-2xl font-bold transition-all ${
+                                            order.status === 'pending' 
+                                                ? "bg-green-600 text-white hover:bg-green-700 shadow-sm" 
+                                                : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                        }`}
                                     >
                                         {processingId === `${order.id}-invoice` ? "..." : "Facturer"}
                                     </button>
+
+                                    {/* On ne peut expédier que si c'est en cours (processing) ou en attente si Bagisto le permet, mais désactivé si completed/canceled */}
                                     <button
-                                        disabled={processingId === `${order.id}-ship` || order.status === 'completed'}
+                                        disabled={processingId === `${order.id}-ship` || order.status === 'completed' || order.status === 'canceled'}
                                         onClick={() => handleAction(order, "ship")}
-                                        className="bg-blue-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-blue-700 disabled:opacity-20"
+                                        className={`px-6 py-3 rounded-2xl font-bold transition-all ${
+                                            (order.status !== 'completed' && order.status !== 'canceled')
+                                                ? "bg-blue-600 text-white hover:bg-blue-700 shadow-sm" 
+                                                : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                        }`}
                                     >
                                         {processingId === `${order.id}-ship` ? "..." : "Expédier"}
                                     </button>
