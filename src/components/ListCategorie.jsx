@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 export default function ListCategories() {
 
   const { data } = useFetch(
-  " http://localhost:8008/api/v1/categories?sort=id&page=1&limit=100"
+    "http://localhost:8008/api/v1/categories?parent_id=1&sort=id&page=1&limit=100"
   );
 
   return (
@@ -21,7 +21,7 @@ export default function ListCategories() {
           >
             <h2 className="text-xl font-semibold text-blue-600 mb-2">{categorie.name}</h2>
             <p className="text-gray-600 line-clamp-3">
-              {categorie.description.replace(/<[^>]*>/g, "")}
+              {(categorie.description || "").replace(/<[^>]*>/g, "")}
             </p>
           </Link>
         ))}
