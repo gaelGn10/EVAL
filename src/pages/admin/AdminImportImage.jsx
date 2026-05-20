@@ -24,7 +24,8 @@ export default function AdminImportImage() {
                 },
                 body: JSON.stringify({
                     email: "rambelosongael@gmail.com",
-                    password: "bonjour7"
+                    password: "bonjour7",
+                    device_name: "web"
                 })
             });
             if (res.ok) {
@@ -118,6 +119,23 @@ export default function AdminImportImage() {
 
                     addLog(`Produit trouvé (ID: ${productId}, Nom: ${productName}). Préparation de l'upload...`, "success");
 
+                    // Récupérer les catégories et canaux existants du produit pour éviter de les écraser
+                    let categoryIds = [1];
+                    if (product.categories && Array.isArray(product.categories)) {
+                        const ids = product.categories.map(c => typeof c === 'object' ? c.id : c).filter(Boolean);
+                        if (ids.length > 0) {
+                            categoryIds = ids;
+                        }
+                    }
+
+                    let channelIds = [1];
+                    if (product.channels && Array.isArray(product.channels)) {
+                        const ids = product.channels.map(c => typeof c === 'object' ? c.id : c).filter(Boolean);
+                        if (ids.length > 0) {
+                            channelIds = ids;
+                        }
+                    }
+
                     // 2. Extraire l'image du zip en Blob
                     const blob = await entry.async("blob");
                     const imageFile = new File([blob], filename, { type: mimeType });
@@ -136,9 +154,22 @@ export default function AdminImportImage() {
                     formData.append('short_description', shortDescription);
                     formData.append('description', description);
                     
-                    // Relations indispensables
-                    formData.append('channels[0]', '1');
-                    formData.append('categories[0]', '1');
+                    // Relations indispensables (sans écraser)
+                    channelIds.forEach((chId, idx) => {
+                        formData.append(`channels[${idx}]`, chId.toString());
+                    });
+                    categoryIds.forEach((catId, idx) => {
+                        formData.append(`categories[${idx}]`, catId.toString());
+                    });
+
+                    // Images existantes à conserver (sans écraser)
+                    if (product.images && Array.isArray(product.images)) {
+                        product.images.forEach(img => {
+                            if (img.id) {
+                                formData.append(`images[${img.id}]`, img.path || img.url || "keep");
+                            }
+                        });
+                    }
                     
                     // Traductions obligatoires
                     formData.append('fr[name]', productName);

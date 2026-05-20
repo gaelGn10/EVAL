@@ -12,6 +12,38 @@ export default function AdminImport() {
     const DEV_TOKEN = "41|Y8QQW9fezzEnu5uD3VTvuZvIt6uS1yKgqwdXidge18351ff3";
     const TOKEN = (SESSION_TOKEN && SESSION_TOKEN !== "fake_admin_token_for_ui") ? SESSION_TOKEN : DEV_TOKEN;
 
+    // Helper pour obtenir un token administrateur valide à la volée (résistant aux resets DB)
+    const getValidAdminToken = async () => {
+        const cached = sessionStorage.getItem("bagisto_real_admin_token");
+        if (cached) return cached;
+
+        try {
+            const res = await fetch("http://localhost:8008/api/v1/admin/login", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                body: JSON.stringify({
+                    email: "rambelosongael@gmail.com",
+                    password: "bonjour7",
+                    device_name: "web"
+                })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.token) {
+                    sessionStorage.setItem("bagisto_real_admin_token", data.token);
+                    return data.token;
+                }
+            }
+        } catch (e) {
+            console.error("Erreur login auto admin", e);
+        }
+
+        return TOKEN;
+    };
+
     const parseFile = (file) => {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -30,7 +62,7 @@ export default function AdminImport() {
                     : firstLine.includes(";") ? ";"
                         : ",";
 
-                const headers = firstLine.split(sep).map(h => h.trim().toLowerCase().replace(/\s+/g, ""));
+                const headers = firstLine.split(sep).map(h => h.trim().toLowerCase().replace(/['"\s\ufeff]+/g, ""));
 
                 const data = [];
                 for (let i = 1; i < lines.length; i++) {
@@ -41,7 +73,10 @@ export default function AdminImport() {
 
                     const row = {};
                     headers.forEach((h, idx) => {
-                        row[h] = (parts[idx] || "").trim();
+                        let val = (parts[idx] || "").trim();
+                        // Nettoyer les guillemets simples ou doubles autour de la valeur
+                        val = val.replace(/^['"]|['"]$/g, "").trim();
+                        row[h] = val;
                     });
                     data.push(row);
                 }
@@ -78,6 +113,8 @@ export default function AdminImport() {
     const importProducts = async (file) => {
         try {
             setLoading(true);
+            const activeToken = await getValidAdminToken();
+            const TOKEN = activeToken;
             setStatus({ type: "info", message: "Analyse du fichier..." });
             const rawData = await parseFile(file);
             if (!rawData || rawData.length === 0) throw new Error("Fichier vide");
@@ -96,13 +133,40 @@ export default function AdminImport() {
                 console.error("Impossible de charger le cache des catégories", e);
             }
 
+            // Trouver la catégorie racine de manière robuste (priorité absolue à l'ID 1, au slug root, ou au nom racine)
+            const rootCategory = existingCategories.find(c => c.id === 1 || c.id === "1" || c.slug === "root" || c.name?.toLowerCase() === "racine") || existingCategories.find(c => c.parent_id === null || !c.parent_id) || existingCategories[0];
+            const rootCategoryId = rootCategory ? parseInt(rootCategory.id) : 1;
+            console.log(`ID de la catégorie racine détecté : ${rootCategoryId}`);
+
+            // Détection dynamique des locales actives du backend pour contourner les erreurs de validation
+            const activeLocales = [];
+            if (rootCategory) {
+                if (rootCategory.translations && Array.isArray(rootCategory.translations)) {
+                    rootCategory.translations.forEach(t => {
+                        if (t.locale && !activeLocales.includes(t.locale)) {
+                            activeLocales.push(t.locale);
+                        }
+                    });
+                }
+                const commonLocales = ["fr", "en", "fr_FR", "en_US"];
+                commonLocales.forEach(loc => {
+                    if (rootCategory[loc] && !activeLocales.includes(loc)) {
+                        activeLocales.push(loc);
+                    }
+                });
+            }
+            if (activeLocales.length === 0) {
+                activeLocales.push("fr", "en"); // fallback
+            }
+            console.log("Locales actives détectées :", activeLocales);
+
             // 1. Validation : Nom de colonne non conforme
             const headers = Object.keys(rawData[0] || {});
             const hasSkuHeader = headers.some(h => ["sku", "ref"].includes(h));
             const hasNameHeader = headers.some(h => ["name", "nom", "label"].includes(h));
             const hasPriceHeader = headers.some(h => ["price", "prix", "prix_vente", "prix_promo", "promo"].includes(h));
             const hasStockHeader = headers.some(h => ["stock_initial", "stock"].includes(h));
-            
+
             if (!hasSkuHeader || !hasNameHeader || !hasPriceHeader || !hasStockHeader) {
                 throw new Error("Nom de colonne non conforme. Les colonnes 'sku', 'nom' (ou 'name'), 'prix_vente' (ou 'prix') et 'stock' sont requises.");
             }
@@ -118,13 +182,14 @@ export default function AdminImport() {
                 const price = promoPrice > 0 ? promoPrice : regularPrice;
 
                 if (price <= 0 || regularPrice <= 0 || (promoVal && promoPrice <= 0)) {
-                    throw new Error("montant positif requis : le prix du produit '" + (sku || 'Ligne ' + (i+1)) + "' doit être strictement supérieur à 0.");
+                    throw new Error("montant positif requis : le prix du produit '" + (sku || 'Ligne ' + (i + 1)) + "' doit être strictement supérieur à 0.");
                 }
             }
 
             setProgress({ current: 0, total: rawData.length, type: "Produits" });
 
             let successCount = 0;
+            const failedCategories = [];
             for (let i = 0; i < rawData.length; i++) {
                 let row = rawData[i];
 
@@ -149,34 +214,107 @@ export default function AdminImport() {
                 }
 
                 // Détermination de la catégorie
-                const categoryName = (row.categorie || row.category || row.class || row.type_produit || "").toString().trim();
+                const categoryKey = Object.keys(row).find(k =>
+                    k === "categorie" ||
+                    k === "catégorie" ||
+                    k === "category" ||
+                    k.includes("categor") ||
+                    k.includes("catégor") ||
+                    k === "class" ||
+                    k === "type_produit"
+                );
+                const categoryName = (
+                    (categoryKey ? row[categoryKey] : "") ||
+                    row.categorie ||
+                    row.catégorie ||
+                    row.category ||
+                    row.class ||
+                    row.type_produit ||
+                    Object.values(row)[3] ||
+                    ""
+                ).toString().trim();
                 let categoryId = null;
 
                 if (categoryName) {
-                    const matchedCat = existingCategories.find(c => c.name?.toLowerCase() === categoryName.toLowerCase());
-                    if (matchedCat) {
-                        categoryId = matchedCat.id;
-                    } else {
-                        // Créer la catégorie dynamiquement
-                        try {
-                            const catSlug = categoryName.toLowerCase()
-                                .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-                                .replace(/[^a-z0-9]+/g, "-")
-                                .replace(/(^-|-$)+/g, "");
+                    const catSlug = categoryName.toLowerCase()
+                        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                        .replace(/[^a-z0-9]+/g, "-")
+                        .replace(/(^-|-$)+/g, "");
 
+                    // Recherche ultra-robuste dans le cache des catégories
+                    const matchedCat = existingCategories.find(c => {
+                        const nameLower = categoryName.toLowerCase();
+                        const slugLower = catSlug.toLowerCase();
+
+                        // 1. Recherche par nom ou slug direct au premier niveau
+                        if (c.name?.toLowerCase() === nameLower) return true;
+                        if (c.slug?.toLowerCase() === slugLower) return true;
+
+                        // 2. Recherche dans les traductions (cas standard Bagisto)
+                        if (c.translations && Array.isArray(c.translations)) {
+                            return c.translations.some(t =>
+                                t.name?.toLowerCase() === nameLower ||
+                                t.slug?.toLowerCase() === slugLower
+                            );
+                        }
+
+                        // 3. Recherche sous toutes les locales détectées et courantes
+                        const checkLocales = Array.from(new Set([...activeLocales, "fr", "en", "fr_FR", "en_US"]));
+                        for (const loc of checkLocales) {
+                            if (c[loc] && typeof c[loc] === 'object') {
+                                if (c[loc].name?.toLowerCase() === nameLower || c[loc].slug?.toLowerCase() === slugLower) {
+                                    return true;
+                                }
+                            }
+                        }
+
+                        return false;
+                    });
+
+                    if (matchedCat) {
+                        categoryId = parseInt(matchedCat.id);
+                        console.log(`✓ Catégorie trouvée dans le cache: ${categoryName} (ID: ${categoryId})`);
+                    } else {
+                        // Créer la catégorie dynamiquement si elle n'existe vraiment pas
+                        try {
                             const catPayload = {
                                 name: categoryName,
                                 slug: catSlug,
                                 position: 1,
                                 status: 1,
-                                parent_id: 1,
+                                display_mode: "products_and_description",
+                                description: categoryName,
+                                parent_id: rootCategoryId,
                                 attributes: [11],
-                                locales: ["fr", "en"],
-                                fr: { name: categoryName, slug: catSlug, description: categoryName, meta_title: categoryName },
-                                en: { name: categoryName, slug: catSlug, description: categoryName, meta_title: categoryName }
+                                locales: activeLocales
                             };
 
-                            console.log(`Création de la catégorie: ${categoryName}...`);
+                            // Double-mapping des traductions pour toutes les locales actives et courantes
+                            const allLocalesToMap = Array.from(new Set([...activeLocales, "fr", "en", "fr_FR", "en_US"]));
+                            allLocalesToMap.forEach(loc => {
+                                catPayload[loc] = {
+                                    name: categoryName,
+                                    slug: catSlug,
+                                    description: categoryName,
+                                    meta_title: categoryName,
+                                    meta_description: categoryName,
+                                    meta_keywords: categoryName
+                                };
+                            });
+
+                            catPayload.translations = {};
+                            activeLocales.forEach(loc => {
+                                catPayload.translations[loc] = {
+                                    name: categoryName,
+                                    slug: catSlug,
+                                    description: categoryName,
+                                    meta_title: categoryName,
+                                    meta_description: categoryName,
+                                    meta_keywords: categoryName
+                                };
+                            });
+
+                            console.log(`Création de la catégorie: ${categoryName}...`, catPayload);
                             const newCatRes = await fetch("http://localhost:8008/api/v1/admin/catalog/categories", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json", "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` },
@@ -185,11 +323,96 @@ export default function AdminImport() {
 
                             if (newCatRes.ok) {
                                 const newCatData = await newCatRes.json();
-                                categoryId = newCatData.data.id;
-                                console.log(`✓ Catégorie créée: ${categoryName} (ID: ${categoryId})`);
-                                existingCategories.push(newCatData.data);
+                                categoryId = newCatData?.data?.id || newCatData?.category?.id || newCatData?.data?.category?.id || newCatData?.id;
+
+                                if (!categoryId) {
+                                    console.log(`⚠️ ID de catégorie non résolu à partir de la réponse. Recherche active via l'API...`);
+                                    try {
+                                        const checkRes = await fetch("http://localhost:8008/api/v1/admin/catalog/categories?limit=100", {
+                                            headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
+                                        });
+                                        if (checkRes.ok) {
+                                            const checkData = await checkRes.json();
+                                            const list = checkData?.data || [];
+                                            const matched = list.find(c => c.slug === catSlug || c.name?.toLowerCase() === categoryName.toLowerCase());
+                                            if (matched) {
+                                                categoryId = matched.id;
+                                            }
+                                        }
+                                    } catch (err) {
+                                        console.error("Erreur lors de la récupération de secours de l'ID de catégorie", err);
+                                    }
+                                }
+
+                                if (categoryId) {
+                                    categoryId = parseInt(categoryId);
+                                    console.log(`✓ Catégorie créée/résolue avec succès: ${categoryName} (ID: ${categoryId})`);
+
+                                    // On ajoute le nom et slug au premier niveau dans le cache pour faciliter les prochaines recherches directes
+                                    const cachedCat = {
+                                        id: categoryId,
+                                        name: categoryName,
+                                        slug: catSlug,
+                                        translations: activeLocales.map(loc => ({ locale: loc, name: categoryName, slug: catSlug }))
+                                    };
+                                    allLocalesToMap.forEach(loc => {
+                                        cachedCat[loc] = { name: categoryName, slug: catSlug };
+                                    });
+                                    existingCategories.push(cachedCat);
+                                } else {
+                                    console.warn(`✗ Impossible de résoudre l'ID de la catégorie créée : ${categoryName}`);
+                                    failedCategories.push(`${categoryName} (ID non résolu)`);
+                                }
                             } else {
-                                console.error(`✗ Erreur création catégorie ${categoryName}:`, await newCatRes.text());
+                                const errorText = await newCatRes.text();
+                                let errorDetail = errorText;
+                                try {
+                                    const parsed = JSON.parse(errorText);
+                                    errorDetail = parsed.message || JSON.stringify(parsed.errors) || errorText;
+                                } catch (e) { }
+                                console.warn(`✗ Échec création catégorie ${categoryName}:`, errorDetail);
+                                failedCategories.push(`${categoryName} (${errorDetail})`);
+
+                                // Si l'erreur indique que le slug existe déjà, on tente de re-fetcher toutes les catégories pour récupérer l'ID
+                                if (errorText.includes("already been taken") || errorText.includes("déjà pris")) {
+                                    console.log(`🔄 Le slug existe déjà. Re-chargement de la liste des catégories Bagisto...`);
+                                    try {
+                                        const refreshRes = await fetch("http://localhost:8008/api/v1/admin/catalog/categories?limit=100", {
+                                            headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
+                                        });
+                                        if (refreshRes.ok) {
+                                            const refreshData = await refreshRes.json();
+                                            existingCategories = refreshData?.data || [];
+
+                                            // Nouvelle recherche avec les données rafraîchies
+                                            const foundCat = existingCategories.find(c => {
+                                                const nameLower = categoryName.toLowerCase();
+                                                const slugLower = catSlug.toLowerCase();
+                                                if (c.name?.toLowerCase() === nameLower || c.slug?.toLowerCase() === slugLower) return true;
+                                                if (c.translations && Array.isArray(c.translations)) {
+                                                    return c.translations.some(t =>
+                                                        t.name?.toLowerCase() === nameLower ||
+                                                        t.slug?.toLowerCase() === slugLower
+                                                    );
+                                                }
+                                                for (const loc of allLocalesToMap) {
+                                                    if (c[loc] && typeof c[loc] === 'object') {
+                                                        if (c[loc].name?.toLowerCase() === nameLower || c[loc].slug?.toLowerCase() === slugLower) {
+                                                            return true;
+                                                        }
+                                                    }
+                                                }
+                                                return false;
+                                            });
+                                            if (foundCat) {
+                                                categoryId = parseInt(foundCat.id);
+                                                console.log(`✓ ID de catégorie récupéré avec succès après rafraîchissement : ${categoryId}`);
+                                            }
+                                        }
+                                    } catch (refreshErr) {
+                                        console.error("Erreur lors du rafraîchissement des catégories", refreshErr);
+                                    }
+                                }
                             }
                         } catch (err) {
                             console.error("Erreur création catégorie", err);
@@ -204,6 +427,7 @@ export default function AdminImport() {
 
                 try {
                     let productId;
+                    let existingProduct = null;
 
                     // ÉTAPE 1 : CRÉATION DU PRODUIT (BASE)
                     console.log(`Étape 1 : Création du produit ${sku}...`);
@@ -224,11 +448,44 @@ export default function AdminImport() {
                             headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
                         });
                         const searchData = await searchRes.json();
-                        productId = searchData.data?.[0]?.id;
+                        existingProduct = searchData.data?.[0];
+                        productId = existingProduct?.id;
                         if (!productId) throw new Error("Impossible de trouver l'ID du produit existant.");
                         console.log(`✓ ID trouvé : ${productId}. Mise à jour forcée...`);
                     } else {
                         throw new Error(createData.message || "Erreur création");
+                    }
+
+                    // Déterminer la liste des categories à associer
+                    let categoryIds = categoryId ? [categoryId] : [rootCategoryId];
+                    if (!categoryId && existingProduct) {
+                        if (existingProduct.categories && Array.isArray(existingProduct.categories)) {
+                            const ids = existingProduct.categories.map(c => typeof c === 'object' ? c.id : c).filter(Boolean);
+                            if (ids.length > 0) {
+                                categoryIds = ids;
+                            }
+                        }
+                    }
+
+                    // Déterminer la liste des canaux à associer
+                    let channelIds = [1];
+                    if (existingProduct && existingProduct.channels && Array.isArray(existingProduct.channels)) {
+                        const ids = existingProduct.channels.map(c => typeof c === 'object' ? c.id : c).filter(Boolean);
+                        if (ids.length > 0) {
+                            channelIds = ids;
+                        }
+                    }
+
+                    // Récupérer les images existantes pour éviter de les supprimer
+                    const imagesPayload = {
+                        files: []
+                    };
+                    if (existingProduct && existingProduct.images && Array.isArray(existingProduct.images)) {
+                        existingProduct.images.forEach(img => {
+                            if (img.id) {
+                                imagesPayload[img.id] = img.path || img.url || "keep";
+                            }
+                        });
                     }
 
                     // ÉTAPE 2 : MISE À JOUR DES ATTRIBUTS (NOM, PRIX, ETC.)
@@ -243,15 +500,24 @@ export default function AdminImport() {
                         attribute_family_id: 1,
                         short_description: name,
                         description: name,
-                        channels: [1],
-                        categories: categoryId ? [categoryId] : [1],
-                        locales: ["fr", "en"],
-                        fr: { name, url_key: urlKey, description: name, short_description: name },
-                        en: { name, url_key: urlKey, description: name, short_description: name },
+                        channels: channelIds,
+                        categories: categoryIds,
+                        images: imagesPayload,
+                        locales: activeLocales,
                         inventories: { "1": qty },
                         new: 1,
                         featured: 1
                     };
+
+                    const allProductLocales = Array.from(new Set([...activeLocales, "fr", "en", "fr_FR", "en_US"]));
+                    allProductLocales.forEach(loc => {
+                        updatePayload[loc] = {
+                            name: name,
+                            url_key: urlKey,
+                            description: name,
+                            short_description: name
+                        };
+                    });
 
                     const updateRes = await fetch(`http://localhost:8008/api/v1/admin/catalog/products/${productId}`, {
                         method: "PUT",
@@ -270,10 +536,17 @@ export default function AdminImport() {
                     console.error(`! Erreur pour ${sku}:`, e.message);
                 }
             }
-            setStatus({
-                type: successCount > 0 ? "success" : "error",
-                message: `${successCount}/${rawData.length} produits importés. Vérifiez la console.`
-            });
+            if (failedCategories.length > 0) {
+                setStatus({
+                    type: "warning",
+                    message: `${successCount}/${rawData.length} produits importés. Attention, certaines catégories n'ont pas pu être créées (repliées sur Racine) : ${failedCategories.join(', ')}`
+                });
+            } else {
+                setStatus({
+                    type: successCount > 0 ? "success" : "error",
+                    message: `${successCount}/${rawData.length} produits importés avec succès !`
+                });
+            }
         } catch (err) {
             setStatus({ type: "error", message: "Erreur d'importation : " + err.message });
         } finally {
@@ -297,7 +570,7 @@ export default function AdminImport() {
             const hasFirstNameHeader = headers.some(h => ["first_name", "prenom"].includes(h));
             const hasLastNameHeader = headers.some(h => ["last_name", "nom"].includes(h));
             const hasPasswordHeader = headers.some(h => ["password", "pwd"].includes(h));
-            
+
             if (!hasEmailHeader || !hasFirstNameHeader || !hasLastNameHeader || !hasPasswordHeader) {
                 throw new Error("Nom de colonne non conforme. Les colonnes 'email', 'prenom', 'nom' et 'password' sont requises.");
             }
@@ -387,6 +660,8 @@ export default function AdminImport() {
     const importOrders = async (file) => {
         try {
             setLoading(true);
+            const activeToken = await getValidAdminToken();
+            const TOKEN = activeToken;
             setStatus({ type: "info", message: "Lecture du fichier commandes..." });
             const rows = await parseFile(file);
 
@@ -397,7 +672,7 @@ export default function AdminImport() {
             const hasDateHeader = headers.some(h => ["date"].includes(h));
             const hasClientHeader = headers.some(h => ["client", "email"].includes(h));
             const hasAchatHeader = headers.some(h => ["achat", "achats", "produits"].includes(h));
-            
+
             if (!hasDateHeader || !hasClientHeader || !hasAchatHeader) {
                 throw new Error("Nom de colonne non conforme. Les colonnes 'date', 'client' (ou 'email') et 'achat' sont requises.");
             }
@@ -425,7 +700,7 @@ export default function AdminImport() {
                         const [skuRaw, qtyRaw] = inner.split(";");
                         const qty = parseInt(qtyRaw) || 0;
                         if (qty <= 0) {
-                            throw new Error(`montant positif requis : la quantité du produit '${skuRaw || 'Ligne ' + (i+1)}' doit être supérieure à 0.`);
+                            throw new Error(`montant positif requis : la quantité du produit '${skuRaw || 'Ligne ' + (i + 1)}' doit être supérieure à 0.`);
                         }
                     }
                 }
@@ -487,9 +762,32 @@ export default function AdminImport() {
                         });
                         const pData = await pRes.json();
                         if (pData.data && pData.data.length > 0) {
-                            pId = pData.data[0].id;
-                            pPrice = parseFloat(pData.data[0].price) || 0;
-                            pName = pData.data[0].name || pName;
+                            const productData = pData.data[0];
+                            pId = productData.id;
+                            pPrice = parseFloat(productData.price) || 0;
+                            pName = productData.name || pName;
+
+                            // Récupérer la quantité actuelle en stock
+                            const inventories = productData.inventories || [];
+                            const currentQty = inventories.length > 0 ? (parseInt(inventories[0].qty) || 0) : 0;
+
+                            // Si le stock actuel est inférieur à la quantité commandée, on l'ajuste via l'API dédiée
+                            if (currentQty < item.qty) {
+                                console.log(`🔄 Ajustement de stock requis pour ${item.sku} : actuel ${currentQty} < requis ${item.qty}. Ajustement à ${item.qty}...`);
+                                await fetch(`http://localhost:8008/api/v1/admin/catalog/products/${pId}/inventories`, {
+                                    method: "POST",
+                                    headers: {
+                                        "Content-Type": "application/json",
+                                        "Accept": "application/json",
+                                        "Authorization": `Bearer ${TOKEN}`
+                                    },
+                                    body: JSON.stringify({
+                                        inventories: {
+                                            "1": item.qty
+                                        }
+                                    })
+                                });
+                            }
                         }
                     } catch (e) {
                         console.error(`Erreur fetch produit ${item.sku}`, e);
@@ -656,8 +954,89 @@ export default function AdminImport() {
                                                 body: JSON.stringify({ invoice: { items: invoiceItems } })
                                             });
 
+                                            // --- DECREASE STOCK ON INVOICE FOR IMPORTED ORDERS (STATUS BECOMES 'PROCESSING' / 'EN COURS' OR 'COMPLETED') ---
+                                            console.log("📉 Diminution du stock pour les articles de la commande importée facturée...");
+                                            for (const item of fullOrder.items) {
+                                                const matchedItem = itemsWithPrices.find(iwp => iwp.sku === item.sku);
+                                                const pId = item.product_id || matchedItem?.id || item.additional?.product_id || item.additional_fields?.product_id;
+                                                if (pId && item.qty_ordered) {
+                                                    try {
+                                                        const pRes = await fetch(`http://localhost:8008/api/v1/admin/catalog/products/${pId}`, {
+                                                            headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
+                                                        });
+                                                        const pData = await pRes.json();
+                                                        const productData = pData.data || pData;
+
+                                                        if (productData) {
+                                                            const inventories = productData.inventories || [];
+                                                            const currentQty = inventories.length > 0 ? (parseInt(inventories[0].qty) || 0) : 0;
+                                                            const orderedQty = parseInt(item.qty_ordered) || 0;
+                                                            const newQty = Math.max(0, currentQty - orderedQty);
+
+                                                            console.log(`📉 Produit ID ${pId} (${item.name}) : stock actuel ${currentQty} - commandé ${orderedQty} => nouveau stock ${newQty}`);
+
+                                                            await fetch(`http://localhost:8008/api/v1/admin/catalog/products/${pId}/inventories`, {
+                                                                method: "POST",
+                                                                headers: {
+                                                                    "Content-Type": "application/json",
+                                                                    "Accept": "application/json",
+                                                                    "Authorization": `Bearer ${TOKEN}`
+                                                                },
+                                                                body: JSON.stringify({
+                                                                    inventories: {
+                                                                        "1": newQty
+                                                                    }
+                                                                })
+                                                            });
+                                                        }
+                                                    } catch (pErr) {
+                                                        console.error(`Erreur diminution stock pour produit ID ${pId}`, pErr);
+                                                    }
+                                                }
+                                            }
+
                                             // Expédition (Shipment) requise uniquement pour completed
                                             if (statusStr === "completed") {
+                                                // --- PRE-SHIPMENT STOCK ADJUSTMENT TO PRESERVE POST-INVOICE STOCK ---
+                                                console.log("🔄 Ajustement compensatoire des stocks avant expédition (import) pour conserver le niveau de stock après facturation...");
+                                                for (const item of fullOrder.items) {
+                                                    const qty = parseInt(item.qty_ordered || 0);
+                                                    const matchedItem = itemsWithPrices.find(iwp => iwp.sku === item.sku);
+                                                    const pId = item.product_id || matchedItem?.id || item.additional?.product_id || item.additional_fields?.product_id;
+                                                    if (pId && qty > 0) {
+                                                        try {
+                                                            const pRes = await fetch(`http://localhost:8008/api/v1/admin/catalog/products/${pId}`, {
+                                                                headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
+                                                            });
+                                                            const pData = await pRes.json();
+                                                            const productData = pData.data || pData;
+
+                                                            if (productData) {
+                                                                const inventories = productData.inventories || [];
+                                                                const currentQty = inventories.length > 0 ? (parseInt(inventories[0].qty) || 0) : 0;
+                                                                const tempQty = currentQty + qty;
+
+                                                                console.log(`⚡ Produit ID ${pId} : stock actuel ${currentQty} + expédié ${qty} => ajustement temporaire à ${tempQty} pour compenser la livraison.`);
+                                                                await fetch(`http://localhost:8008/api/v1/admin/catalog/products/${pId}/inventories`, {
+                                                                    method: "POST",
+                                                                    headers: {
+                                                                        "Content-Type": "application/json",
+                                                                        "Accept": "application/json",
+                                                                        "Authorization": `Bearer ${TOKEN}`
+                                                                    },
+                                                                    body: JSON.stringify({
+                                                                        inventories: {
+                                                                            "1": tempQty
+                                                                        }
+                                                                    })
+                                                                });
+                                                            }
+                                                        } catch (pErr) {
+                                                            console.error(`Erreur ajustement stock compensatoire avant expédition pour produit ID ${pId}`, pErr);
+                                                        }
+                                                    }
+                                                }
+
                                                 const itemsMap = {};
                                                 let totalQty = 0;
                                                 fullOrder.items.forEach(item => {
@@ -690,12 +1069,58 @@ export default function AdminImport() {
                             }
                             // ==============================================================================
 
+                            // --- DECREASE STOCK FOR NON-INVOICED ACTIVE ORDERS (e.g. 'PENDING') ---
+                            if (statusStr !== "completed" && statusStr !== "processing" && statusStr !== "canceled") {
+                                console.log("📉 Diminution du stock pour les articles de la commande importée en attente...");
+                                for (const item of itemsWithPrices) {
+                                    if (item.id && item.qty) {
+                                        try {
+                                            const pRes = await fetch(`http://localhost:8008/api/v1/admin/catalog/products/${item.id}`, {
+                                                headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
+                                            });
+                                            const pData = await pRes.json();
+                                            const productData = pData.data || pData;
+
+                                            if (productData) {
+                                                const inventories = productData.inventories || [];
+                                                const currentQty = inventories.length > 0 ? (parseInt(inventories[0].qty) || 0) : 0;
+                                                const orderedQty = parseInt(item.qty) || 0;
+                                                const newQty = Math.max(0, currentQty - orderedQty);
+
+                                                console.log(`📉 [En attente] Produit ID ${item.id} (${item.name}) : stock actuel ${currentQty} - commandé ${orderedQty} => nouveau stock ${newQty}`);
+
+                                                await fetch(`http://localhost:8008/api/v1/admin/catalog/products/${item.id}/inventories`, {
+                                                    method: "POST",
+                                                    headers: {
+                                                        "Content-Type": "application/json",
+                                                        "Accept": "application/json",
+                                                        "Authorization": `Bearer ${TOKEN}`
+                                                    },
+                                                    body: JSON.stringify({
+                                                        inventories: {
+                                                            "1": newQty
+                                                        }
+                                                    })
+                                                });
+                                            }
+                                        } catch (pErr) {
+                                            console.error(`Erreur diminution stock pour produit ID ${item.id}`, pErr);
+                                        }
+                                    }
+                                }
+                            }
+                            // ==============================================================================
+
                             // Sauvegarde des métadonnées (status, date, vrai total) pour l'affichage FrontOffice
+                            // Les flags invoiced/shipped permettent à AdminOrders.jsx de calculer le statut et les boutons
                             const existingOrders = JSON.parse(localStorage.getItem('imported_orders_meta') || '[]');
                             existingOrders.push({
                                 bagisto_order_id: bagistoOrderId,
                                 customer_email: email,
                                 status: statusStr,
+                                // Dériver les flags depuis le statut importé
+                                invoiced: statusStr === 'completed' || statusStr === 'processing',
+                                shipped: statusStr === 'completed',
                                 created_at: `${date} ${heure}`,
                                 grand_total: grandTotal,
                                 items: itemsWithPrices

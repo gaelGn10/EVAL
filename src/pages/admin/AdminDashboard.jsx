@@ -21,7 +21,7 @@ export default function AdminDashboard() {
                     </div>
                     <h1 className="text-xl font-bold tracking-tight">Admin Dashboard</h1>
                 </div>
-                <button 
+                <button
                     onClick={handleLogout}
                     className="bg-gray-800 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all"
                 >
@@ -31,11 +31,11 @@ export default function AdminDashboard() {
 
             {/* Main Content */}
             <main className="p-8 flex-grow">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <StatCard title="Total Ventes" value="1,240 €" color="bg-green-500" />
                     <StatCard title="Commandes" value="48" color="bg-blue-500" />
                     <StatCard title="Produits" value="156" color="bg-purple-500" />
-                </div>
+                </div> */}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                     <Link to="/admin/orders" className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm hover:shadow-md transition-all group flex items-center gap-6">

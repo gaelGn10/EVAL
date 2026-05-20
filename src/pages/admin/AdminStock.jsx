@@ -12,14 +12,55 @@ export default function AdminStock() {
     // Récupération du token admin
     const SESSION_TOKEN = sessionStorage.getItem("bagisto_admin_token");
     const DEV_TOKEN = "41|Y8QQW9fezzEnu5uD3VTvuZvIt6uS1yKgqwdXidge18351ff3";
-    const TOKEN = (SESSION_TOKEN && SESSION_TOKEN !== "fake_admin_token_for_ui") ? SESSION_TOKEN : DEV_TOKEN;
+    const BASE_TOKEN = (SESSION_TOKEN && SESSION_TOKEN !== "fake_admin_token_for_ui") ? SESSION_TOKEN : DEV_TOKEN;
 
-    const fetchProducts = async () => {
+    const getValidAdminToken = async (forceRefresh = false) => {
+        if (forceRefresh) {
+            sessionStorage.removeItem("bagisto_real_admin_token");
+        }
+        const cached = sessionStorage.getItem("bagisto_real_admin_token");
+        if (cached) return cached;
+
         try {
-            setLoading(true);
-            const response = await fetch("http://localhost:8008/api/v1/admin/catalog/products?limit=100", {
-                headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
+            const res = await fetch("http://localhost:8008/api/v1/admin/login", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                body: JSON.stringify({
+                    email: "rambelosongael@gmail.com",
+                    password: "bonjour7",
+                    device_name: "web"
+                })
             });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.token) {
+                    sessionStorage.setItem("bagisto_real_admin_token", data.token);
+                    return data.token;
+                }
+            }
+        } catch (e) {
+            console.error("Erreur login auto admin", e);
+        }
+
+        return BASE_TOKEN;
+    };
+
+    const fetchProducts = async (isRetry = false) => {
+        try {
+            if (!isRetry) setLoading(true);
+            const activeToken = await getValidAdminToken(isRetry);
+            const response = await fetch("http://localhost:8008/api/v1/admin/catalog/products?limit=100", {
+                headers: { "Accept": "application/json", "Authorization": `Bearer ${activeToken}` }
+            });
+            
+            if (response.status === 401 && !isRetry) {
+                console.warn("Jeton d'administration expiré ou invalide. Tentative de reconnexion...");
+                return fetchProducts(true);
+            }
+            
             const result = await response.json();
             if (!response.ok) throw new Error(result.message || "Erreur lors du chargement des produits");
             
@@ -36,7 +77,7 @@ export default function AdminStock() {
         } catch (err) {
             setError(err.message);
         } finally {
-            setLoading(false);
+            if (!isRetry) setLoading(false);
         }
     };
 
@@ -44,51 +85,34 @@ export default function AdminStock() {
         fetchProducts();
     }, []);
 
-    const handleUpdateStock = async (product) => {
+    const handleUpdateStock = async (product, isRetry = false) => {
         const newQty = localStocks[product.id];
         if (newQty === undefined || newQty < 0) {
             alert("La quantité en stock doit être positive.");
             return;
         }
 
-        setSavingId(product.id);
+        if (!isRetry) setSavingId(product.id);
         try {
-            // Construction dynamique du payload en reprenant les données existantes du produit
-            const urlKey = product.url_key || product.name.toLowerCase()
-                .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-                .replace(/[^a-z0-9]+/g, "-")
-                .replace(/(^-|-$)+/g, "");
-
-            const updatePayload = {
-                sku: product.sku,
-                name: product.name,
-                url_key: urlKey,
-                price: parseFloat(product.price) || 0,
-                weight: parseFloat(product.weight) || 1,
-                status: parseInt(product.status) || 1,
-                visible_individually: 1,
-                attribute_family_id: product.attribute_family_id || 1,
-                short_description: product.short_description || product.name,
-                description: product.description || product.name,
-                channels: [1],
-                categories: [1],
-                locales: ["fr", "en"],
-                fr: { name: product.name, url_key: urlKey, description: product.description || product.name, short_description: product.short_description || product.name },
-                en: { name: product.name, url_key: urlKey, description: product.description || product.name, short_description: product.short_description || product.name },
-                inventories: { "1": newQty },
-                new: 1,
-                featured: 1
-            };
-
-            const response = await fetch(`http://localhost:8008/api/v1/admin/catalog/products/${product.id}`, {
-                method: "PUT",
+            const activeToken = await getValidAdminToken(isRetry);
+            const response = await fetch(`http://localhost:8008/api/v1/admin/catalog/products/${product.id}/inventories`, {
+                method: "POST",
                 headers: { 
                     "Content-Type": "application/json", 
                     "Accept": "application/json", 
-                    "Authorization": `Bearer ${TOKEN}` 
+                    "Authorization": `Bearer ${activeToken}` 
                 },
-                body: JSON.stringify(updatePayload)
+                body: JSON.stringify({
+                    inventories: {
+                        "1": newQty
+                    }
+                })
             });
+
+            if (response.status === 401 && !isRetry) {
+                console.warn("Jeton expiré lors de la mise à jour du stock. Tentative de reconnexion...");
+                return handleUpdateStock(product, true);
+            }
 
             const result = await response.json();
             if (!response.ok) throw new Error(result.message || "Impossible de mettre à jour le stock.");
@@ -96,7 +120,7 @@ export default function AdminStock() {
             // Mettre à jour la liste des produits avec la nouvelle quantité retournée par le serveur
             setProducts(prev => prev.map(p => {
                 if (p.id === product.id) {
-                    const updatedQty = result.data?.inventories?.[0]?.qty ?? newQty;
+                    const updatedQty = result.data?.total ?? newQty;
                     return {
                         ...p,
                         inventories: [{ ...p.inventories?.[0], qty: updatedQty }]
