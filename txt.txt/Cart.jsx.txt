@@ -1,0 +1,356 @@
+import { useFetch, useMutation } from "../hooks/useHttpRequest";
+import { Link } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
+
+export default function Cart() {
+  const { data, loading, error, refetch } = useFetch(
+    "http://localhost:8008/api/v1/customer/cart"
+  );
+
+  const [localQuantities, setLocalQuantities] = useState({});
+  const [isProcessing, setIsProcessing] = useState(null);
+
+  // Sync local quantities when data arrives
+  useEffect(() => {
+    if (data?.data?.items) {
+      const q = {};
+      data.data.items.forEach(item => q[item.id] = item.quantity);
+      setLocalQuantities(q);
+    }
+  }, [data]);
+
+  const cartItems = data?.data?.items || [];
+  const total = data?.data?.formated_grand_total || "0.00 €";
+  const subtotal = data?.data?.formated_sub_total || "0.00 €";
+  const tax = data?.data?.formated_tax_total || "0.00 €";
+
+  const handleRemoveItem = async (itemId) => {
+    if (!confirm("Voulez-vous retirer cet article du panier ?")) return;
+
+    setIsProcessing(itemId);
+    try {
+      const response = await fetch(`http://localhost:8008/api/v1/customer/cart/remove/${itemId}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${sessionStorage.getItem("bagisto_client_token")}`
+        }
+      });
+
+      if (response.ok) {
+        refetch();
+      } else {
+        const result = await response.json();
+        alert(result.message || "Erreur lors de la suppression");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Erreur réseau");
+    } finally {
+      setIsProcessing(null);
+    }
+  };
+
+  const updateTimeout = useRef(null);
+
+  const handleUpdateQuantity = (itemId, newQty) => {
+    if (newQty < 1) return;
+
+    const item = cartItems.find(i => i.id === itemId);
+    if (item && item.product) {
+      const product = item.product;
+      let stockQty = null;
+      if (product) {
+        if (product.inventories && Array.isArray(product.inventories) && product.inventories.length > 0) {
+          stockQty = parseInt(product.inventories[0].qty, 10);
+        } else if (product.invetory_indices && Array.isArray(product.invetory_indices) && product.invetory_indices.length > 0) {
+          stockQty = parseInt(product.invetory_indices[0].qty, 10);
+        } else if (product.qty !== undefined && product.qty !== null) {
+          stockQty = parseInt(product.qty, 10);
+        } else if (product.stock_qty !== undefined && product.stock_qty !== null) {
+          stockQty = parseInt(product.stock_qty, 10);
+        }
+      }
+      
+      const requestedQty = parseInt(newQty, 10);
+      
+      if (stockQty !== null && !isNaN(stockQty)) {
+        if (requestedQty > stockQty) {
+          alert(`Quantité maximale atteinte. Le stock disponible actuel pour ce produit est de ${stockQty} article(s).`);
+          return;
+        }
+      }
+    }
+
+    // 1. Instant Optimistic UI Update
+    const oldQty = localQuantities[itemId];
+    setLocalQuantities(prev => ({ ...prev, [itemId]: newQty }));
+
+    // 2. Debounce the API call
+    if (updateTimeout.current) clearTimeout(updateTimeout.current);
+
+    updateTimeout.current = setTimeout(async () => {
+      try {
+        const response = await fetch(`http://localhost:8008/api/v1/customer/cart/update`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: `Bearer ${sessionStorage.getItem("bagisto_client_token")}`
+          },
+          body: JSON.stringify({
+            qty: {
+              [itemId]: newQty
+            }
+          })
+        });
+
+        if (response.ok) {
+          refetch();
+        } else {
+          const result = await response.json();
+          alert(result.message || "Erreur lors de la mise à jour");
+          setLocalQuantities(prev => ({ ...prev, [itemId]: oldQty }));
+        }
+      } catch (err) {
+        console.error(err);
+        setLocalQuantities(prev => ({ ...prev, [itemId]: oldQty }));
+      }
+    }, 500); // Wait 500ms after last click before sending to server
+  };
+
+  const handleEmptyCart = async () => {
+    if (!confirm("Voulez-vous vider tout votre panier ?")) return;
+
+    try {
+      const response = await fetch(`http://localhost:8008/api/v1/customer/cart/empty`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${sessionStorage.getItem("bagisto_client_token")}`
+        }
+      });
+
+      if (response.ok) {
+        refetch();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Helper to format currency
+  const formatPrice = (amount) => {
+    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(amount);
+  };
+
+  // Derive totals locally for instant feedback in the sidebar
+  const derivedSubtotalAmount = cartItems.reduce((acc, item) => {
+    return acc + (item.price * (localQuantities[item.id] || item.quantity));
+  }, 0);
+
+  // We estimate the total by applying the same difference to the original grand total
+  const originalSubtotal = data?.data?.sub_total || 0;
+  const originalTotal = data?.data?.grand_total || 0;
+  const diff = derivedSubtotalAmount - originalSubtotal;
+  const derivedTotalAmount = originalTotal + diff;
+
+  const displaySubtotal = formatPrice(derivedSubtotalAmount);
+  const displayTotal = formatPrice(derivedTotalAmount);
+
+  // Only show full loading if there's no data yet
+  if (loading && !data) return (
+    <div className="flex flex-col items-center justify-center min-h-[70vh] gap-4">
+      <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+      <p className="text-gray-500 font-medium tracking-tight">Chargement de votre panier...</p>
+    </div>
+  );
+
+  if (error) return (
+    <div className="max-w-xl mx-auto my-20 p-8 text-center bg-red-50 rounded-3xl border border-red-100">
+      <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+      </div>
+      <h2 className="text-2xl font-bold text-gray-800 mb-2">Oups !</h2>
+      <p className="text-gray-600 mb-6">Impossible de récupérer votre panier. Vérifiez votre connexion.</p>
+      <button onClick={() => refetch()} className="bg-gray-800 text-white px-6 py-2 rounded-xl hover:bg-black transition-colors">Réessayer</button>
+    </div>
+  );
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
+        <div>
+          <h1 className="text-4xl font-black text-gray-900 tracking-tight">Mon Panier</h1>
+          <p className="text-gray-500 mt-2 font-medium">
+            {cartItems.length} {cartItems.length > 1 ? 'articles sélectionnés' : 'article sélectionné'}
+          </p>
+        </div>
+
+        {cartItems.length > 0 && (
+          <button
+            onClick={handleEmptyCart}
+            className="text-red-500 hover:text-red-600 text-sm font-bold flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-red-50 transition-all"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            VIDER LE PANIER
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 items-start">
+        {/* Items List */}
+        <div className="lg:col-span-2 space-y-6">
+          <AnimatePresence mode="popLayout">
+            {cartItems.length === 0 ? (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-gray-50 rounded-[2.5rem] p-16 text-center border-2 border-dashed border-gray-200"
+              >
+                <div className="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">Votre panier est vide</h2>
+                <p className="text-gray-500 mb-8 max-w-xs mx-auto">On dirait que vous n'avez pas encore trouvé votre bonheur. Explorez nos catégories !</p>
+                <Link to="/accueil" className="inline-flex items-center gap-2 bg-blue-600 text-white px-8 py-4 rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 active:scale-95">
+                  Continuer mes achats
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  </svg>
+                </Link>
+              </motion.div>
+            ) : (
+              cartItems.map((item) => (
+                <motion.div
+                  key={item.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95, x: -20 }}
+                  className="group relative bg-white rounded-[2rem] p-6 flex flex-col sm:flex-row items-center gap-8 border border-gray-100 shadow-sm hover:shadow-md transition-all"
+                >
+                  {/* Product Image */}
+                  <div className="relative w-32 h-32 flex-shrink-0 bg-gray-50 rounded-2xl overflow-hidden group-hover:scale-105 transition-transform duration-500">
+                    <img
+                      src={item.product?.images?.[0]?.path
+                        ? `${item.product.images[0].medium_image_url}`
+                        : (item.product?.images?.[0]?.url || "https://via.placeholder.com/150x150?text=Produit")
+                      }
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  {/* Product Details */}
+                  <div className="flex-grow text-center sm:text-left">
+                    <h3 className="text-xl font-bold text-gray-900 mb-1 group-hover:text-blue-600 transition-colors">{item.name}</h3>
+                    <p className="text-sm text-gray-400 font-medium uppercase tracking-widest mb-4">SKU: {item.sku}</p>
+
+                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-6">
+                      {/* Quantity Controls */}
+                      <div className="flex items-center bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-100 relative overflow-hidden">
+                        <button
+                          onClick={() => handleUpdateQuantity(item.id, (localQuantities[item.id] || item.quantity) - 1)}
+                          disabled={(localQuantities[item.id] || item.quantity) <= 1}
+                          className="w-8 h-8 flex items-center justify-center text-xl text-gray-400 hover:text-blue-600 disabled:opacity-30 transition-colors"
+                        >
+                          −
+                        </button>
+                        <span className="w-10 text-center font-bold text-gray-700">
+                          {localQuantities[item.id] || item.quantity}
+                        </span>
+                        <button
+                          onClick={() => handleUpdateQuantity(item.id, (localQuantities[item.id] || item.quantity) + 1)}
+                          className="w-8 h-8 flex items-center justify-center text-xl text-gray-400 hover:text-blue-600 disabled:opacity-30 transition-colors"
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      <div className="h-8 w-px bg-gray-100 hidden sm:block" />
+
+                      <p className="text-2xl font-black text-gray-900">
+                        {item.formated_total || item.formated_price || `${item.price * (localQuantities[item.id] || item.quantity)} €`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Remove Button */}
+                  <button
+                    onClick={() => handleRemoveItem(item.id)}
+                    disabled={isProcessing === item.id}
+                    className="absolute top-6 right-6 sm:static p-3 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all disabled:opacity-30"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </motion.div>
+              ))
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Summary Sidebar */}
+        <div className="lg:sticky lg:top-8">
+          <div className="bg-gray-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-blue-900/20">
+            <h2 className="text-2xl font-bold mb-8">Récapitulatif</h2>
+
+            <div className="space-y-4 mb-8">
+              <div className="flex justify-between text-gray-400">
+                <span>Sous-total</span>
+                <span className="font-bold text-white">{displaySubtotal}</span>
+              </div>
+              <div className="flex justify-between text-gray-400">
+                <span>TVA</span>
+                <span className="font-bold text-white">{tax}</span>
+              </div>
+              <div className="flex justify-between text-gray-400">
+                <span>Livraison</span>
+                <span className="text-green-400 font-bold">Gratuite</span>
+              </div>
+              <div className="pt-4 border-t border-gray-800 flex justify-between items-end">
+                <div>
+                  <p className="text-sm text-gray-400 font-medium uppercase tracking-widest">Total TTC</p>
+                  <p className="text-4xl font-black text-blue-400 mt-1">{displayTotal}</p>
+                </div>
+              </div>
+            </div>
+
+            <Link
+              to="/checkout"
+              className={`w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-5 rounded-[1.5rem] transition-all shadow-xl shadow-blue-900/20 active:scale-[0.98] flex items-center justify-center gap-3 group ${cartItems.length === 0 ? 'pointer-events-none bg-gray-800 text-gray-600 shadow-none' : ''}`}
+            >
+              PROCÉDER AU PAIEMENT
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+            </Link>
+
+            <p className="text-center text-gray-500 text-xs mt-6 font-medium uppercase tracking-tighter">
+              Paiement sécurisé par SSL 256-bit
+            </p>
+          </div>
+
+          <Link
+            to="/accueil"
+            className="flex items-center justify-center gap-2 mt-6 text-gray-500 hover:text-blue-600 font-bold transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Continuer mes achats
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
