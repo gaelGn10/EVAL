@@ -327,7 +327,31 @@ export default function AdminStock() {
                                             <span className={`text-[10px] font-black border px-2 py-0.5 rounded-full uppercase ${badgeColor}`}>{badgeLabel}</span>
                                         </div>
                                         <h3 className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-1">{product.name}</h3>
-                                        <p className="text-gray-500 font-semibold mt-1">{parseFloat(product.price).toFixed(2)} €</p>
+                                        {(() => {
+                                            const specialPrice = parseFloat(product.special_price || product.prix_promo || 0);
+                                            const originalPrice = parseFloat(product.regular_price || product.prix_vente || product.price || 0);
+                                            const hasPromo = specialPrice > 0 && originalPrice > 0 && originalPrice !== specialPrice;
+
+                                            if (hasPromo) {
+                                                return (
+                                                    <div className="flex items-center gap-2 mt-1 justify-center md:justify-start flex-wrap">
+                                                        <span className="text-base font-bold text-red-600">
+                                                            {specialPrice.toFixed(2)} €
+                                                        </span>
+                                                        <span className="text-xs text-gray-400 line-through decoration-red-500 decoration-2">
+                                                            {originalPrice.toFixed(2)} €
+                                                        </span>
+                                                        <span className="bg-red-100 text-red-600 text-[10px] font-black px-2 py-0.5 rounded-full">
+                                                            Promo
+                                                        </span>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return (
+                                                <p className="text-gray-500 font-semibold mt-1">{originalPrice.toFixed(2)} €</p>
+                                            );
+                                        })()}
                                     </div>
 
                                     {/* Ajustement du Stock */}
@@ -455,7 +479,24 @@ export default function AdminStock() {
                                                         <span className="font-bold text-gray-900 line-clamp-1">{p.name}</span>
                                                     </div>
                                                 </td>
-                                                <td className="p-5 text-right font-bold text-gray-900">{parseFloat(p.price).toFixed(2)} €</td>
+                                                 <td className="p-5 text-right font-bold">
+                                                     {(() => {
+                                                         const specialPrice = parseFloat(p.special_price || p.prix_promo || 0);
+                                                         const originalPrice = parseFloat(p.regular_price || p.prix_vente || p.price || 0);
+                                                         const hasPromo = specialPrice > 0 && originalPrice > 0 && originalPrice !== specialPrice;
+
+                                                         if (hasPromo) {
+                                                             return (
+                                                                 <div className="flex flex-col items-end">
+                                                                     <span className="text-red-600">{specialPrice.toFixed(2)} €</span>
+                                                                     <span className="text-xs text-gray-400 line-through decoration-red-500 decoration-2">{originalPrice.toFixed(2)} €</span>
+                                                                 </div>
+                                                             );
+                                                         }
+
+                                                         return <span className="text-gray-900">{originalPrice.toFixed(2)} €</span>;
+                                                     })()}
+                                                 </td>
                                                 <td className="p-5 text-center text-gray-500 font-semibold">{currentStock}</td>
                                                 <td className="p-5 text-center font-black text-blue-600 bg-blue-50/20">{finalStock}</td>
                                                 <td className="p-5 text-center">
