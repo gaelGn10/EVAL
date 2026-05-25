@@ -9,11 +9,10 @@ export default function ProductsByCategory() {
   const { data, loading, error } = useFetch(
     `http://localhost:8008/api/v1/products?category_id=${id}`
   );
-  
+
   const { data: categoryData } = useFetch(
     `http://localhost:8008/api/v1/categories/${id}`
   );
-
   const products = data?.data || [];
   const categoryName = categoryData?.data?.name || "la catégorie";
 
@@ -22,9 +21,9 @@ export default function ProductsByCategory() {
       <Link to="/accueil" className="text-blue-500 hover:underline mb-4 inline-block">
         &larr; Retour aux catégories
       </Link>
-      
+
       <h1 className="text-3xl font-bold mb-8">Produits de {categoryName}</h1>
-      
+
       {loading ? (
         <div className="flex flex-col items-center justify-center min-h-[40vh] gap-4">
           <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
@@ -47,9 +46,6 @@ export default function ProductsByCategory() {
     </div>
   );
 }
-
-
-
 function ProductCard({ product, navigate }) {
   const [quantity, setQuantity] = useState(1);
   const { toggleWishlist, isInWishlist } = useWishlist();
@@ -141,7 +137,7 @@ function ProductCard({ product, navigate }) {
           />
         </Link>
         <div className="absolute inset-0 bg-black/5 group-hover:bg-black/0 transition-colors pointer-events-none" />
-        
+
         {/* Floating Heart Button */}
         <button
           onClick={(e) => {
@@ -163,7 +159,7 @@ function ProductCard({ product, navigate }) {
           </svg>
         </button>
       </div>
-      
+
       <div className="p-4 flex flex-col flex-grow">
         <Link to={`/product/${product.id}`} className="hover:text-blue-600 transition-colors">
           <h2 className="text-lg font-bold text-gray-800 mb-1 line-clamp-1">{product.name}</h2>
@@ -171,35 +167,62 @@ function ProductCard({ product, navigate }) {
         <p className="text-gray-500 text-sm mb-3 line-clamp-2 h-10">
           {product.short_description?.replace(/<[^>]*>/g, "") || "Aucune description disponible."}
         </p>
-        
+
         <div className="mt-auto">
-          <p className="text-xl font-bold text-gray-900 mb-4">{product.formated_price || `${product.price} €`}</p>
-          
+          {(() => {
+            // Mode promo uniquement si le prix d'origine est distinct du prix spécial
+            const specialPrice = parseFloat(product.special_price || product.prix_promo || 0);
+            const originalPrice = parseFloat(product.regular_price || product.prix_vente || product.price || 0);
+            const hasPromo = specialPrice > 0 && originalPrice > 0 && originalPrice !== specialPrice;
+
+            if (hasPromo) {
+              return (
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                  <span className="text-xl font-bold text-red-600">
+                    {specialPrice.toFixed(2)} €
+                  </span>
+                  <span className="text-sm text-gray-500 line-through decoration-red-500 decoration-2">
+                    {originalPrice.toFixed(2)} €
+                  </span>
+                  <span className="bg-red-100 text-red-600 text-[10px] font-semibold px-2 py-0.5 rounded-full">
+                    Promo
+                  </span>
+                </div>
+              );
+            }
+
+            return (
+              <p className="text-xl font-bold text-gray-900 mb-4">
+                {product.prix_vente ? `${parseFloat(product.prix_vente).toFixed(2)} €` : (product.formated_price || `${originalPrice.toFixed(2)} €`)}
+              </p>
+            );
+          })()}
+
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between bg-gray-50 rounded-lg p-1 border border-gray-200">
-              <button 
-    onClick={() => setQuantity(Math.max(1, quantity - 1))}
-          className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-200 rounded transition-colors"
-        >
-          -
-        </button>
+              <button
+                onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-200 rounded transition-colors"
+              >
+                -
+              </button>
 
-        <input
-          type="number"
-          min="1"
-          value={quantity}
-          onChange={(e) => setQuantity(Number(e.target.value))}
-          className="w-16 text-center border rounded px-2 py-1 font-medium text-gray-700 outline-none"
-        />
+              <input
+                type="number"
+                min="1"
+                value={quantity}
+                onChange={(e) => setQuantity(Number(e.target.value))}
+                className="w-16 text-center border rounded px-2 py-1 font-medium text-gray-700 outline-none"
+              />
 
-        <button 
-          onClick={() => setQuantity(quantity + 1)}
-          className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-200 rounded transition-colors"
-        >
-          +
-        </button>
+              <button
+                onClick={() => setQuantity(quantity + 1)}
+                className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-200 rounded transition-colors"
+              >
+                +
+              </button>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={handleAddToCart}
@@ -210,7 +233,7 @@ function ProductCard({ product, navigate }) {
                 </svg>
                 Panier
               </button>
-              
+
               <Link
                 to={`/product/${product.id}`}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold py-2 px-3 rounded-lg transition-all text-center flex items-center justify-center gap-1 text-xs"

@@ -288,7 +288,34 @@ function ProductItemCard({ product }) {
         </p>
 
         <div className="mt-auto">
-          <p className="text-lg font-black text-gray-900 mb-3">{product.formated_price || `${parseFloat(product.price).toFixed(2)} €`}</p>
+          {(() => {
+            // On affiche le mode promo uniquement si le prix d'origine est distinct du prix spécial
+            const specialPrice = parseFloat(product.special_price || product.prix_promo || 0);
+            const originalPrice = parseFloat(product.regular_price || product.prix_vente || product.price || 0);
+            const hasPromo = specialPrice > 0 && originalPrice > 0 && originalPrice !== specialPrice;
+
+            if (hasPromo) {
+              return (
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <span className="text-lg font-black text-red-600">
+                    {specialPrice.toFixed(2)} €
+                  </span>
+                  <span className="text-xs text-gray-400 line-through decoration-red-500 decoration-2">
+                    {originalPrice.toFixed(2)} €
+                  </span>
+                  <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    Promo
+                  </span>
+                </div>
+              );
+            }
+
+            return (
+              <p className="text-lg font-black text-gray-900 mb-3">
+                {product.prix_vente ? `${parseFloat(product.prix_vente).toFixed(2)} €` : (product.formated_price || `${originalPrice.toFixed(2)} €`)}
+              </p>
+            );
+          })()}
 
           <div className="flex gap-2">
             <button

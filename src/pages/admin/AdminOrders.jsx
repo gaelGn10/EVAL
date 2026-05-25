@@ -87,15 +87,15 @@ export default function AdminOrders() {
             const response = await fetch("http://localhost:8008/api/v1/admin/sales/orders?sort=id&limit=1000", {
                 headers: { "Accept": "application/json", "Authorization": `Bearer ${activeToken}` }
             });
-            
+
             if (response.status === 401 && !isRetry) {
                 console.warn("Jeton d'administration expiré ou invalide. Tentative de reconnexion...");
                 return fetchOrders(true);
             }
-            
+
             const result = await response.json();
             if (!response.ok) throw new Error(result.message || "Erreur API");
-            
+
             let ordersData = result.data || [];
 
             // OVERLAY: Surcharge avec les flags invoiced/shipped pour calcul de statut précis
@@ -115,7 +115,29 @@ export default function AdminOrders() {
                             } else if (meta.status) {
                                 computedStatus = meta.status;
                             }
-                            return { ...order, status: computedStatus, _invoiced: !!meta.invoiced, _shipped: !!meta.shipped };
+
+                            let computedDate = order.created_at;
+                            if (meta.created_at) {
+                                // Extraction robuste de la date (DD/MM/YYYY) et de l'heure (HH:mm)
+                                const dateMatch = meta.created_at.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                                if (dateMatch) {
+                                    const timeMatch = meta.created_at.match(/(\d{2}:\d{2})/);
+                                    const timeStr = timeMatch ? timeMatch[1] : '00:00';
+                                    const localIsoStr = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}T${timeStr}:00`;
+                                    const parsedDate = new Date(localIsoStr);
+                                    if (!isNaN(parsedDate.getTime())) {
+                                        computedDate = parsedDate.toISOString();
+                                    }
+                                }
+                            }
+
+                            return {
+                                ...order,
+                                status: computedStatus,
+                                _invoiced: !!meta.invoiced,
+                                _shipped: !!meta.shipped,
+                                created_at: computedDate
+                            };
                         }
                         return order;
                     });
@@ -146,7 +168,7 @@ export default function AdminOrders() {
                     "Authorization": `Bearer ${activeToken}`
                 };
                 const res = await fetch(url, { ...options, headers });
-                
+
                 if (res.status === 401 && !isRetry) {
                     console.warn(`401 détecté sur ${url}. Tentative de renouvellement du jeton...`);
                     return authenticatedFetch(url, options, true);
@@ -248,7 +270,7 @@ export default function AdminOrders() {
 
                 if (metaIndex !== -1) {
                     if (action === 'invoice') metas[metaIndex].invoiced = true;
-                    if (action === 'ship')    metas[metaIndex].shipped  = true;
+                    if (action === 'ship') metas[metaIndex].shipped = true;
                     // completed seulement si les deux actions ont été faites
                     if (metas[metaIndex].invoiced && metas[metaIndex].shipped) {
                         metas[metaIndex].status = 'completed';
@@ -259,7 +281,7 @@ export default function AdminOrders() {
                     metas.push({
                         bagisto_order_id: order.id,
                         invoiced: action === 'invoice',
-                        shipped:  action === 'ship',
+                        shipped: action === 'ship',
                         status: 'processing'
                     });
                 }
@@ -332,27 +354,27 @@ export default function AdminOrders() {
                                                     )}
                                                 </div>
                                                 <h3 className="text-3xl font-black text-gray-900 tracking-tight">#{order.increment_id || order.id}</h3>
-                                                
+
                                                 {(() => {
                                                     let badgeColor = "bg-gray-100 text-gray-700";
                                                     let badgeLabel = order.status;
-                                                    
-                                                    switch(order.status?.toLowerCase()) {
-                                                        case "pending": 
-                                                            badgeColor = "bg-amber-100 text-amber-700"; 
-                                                            badgeLabel = "En attente"; 
+
+                                                    switch (order.status?.toLowerCase()) {
+                                                        case "pending":
+                                                            badgeColor = "bg-amber-100 text-amber-700";
+                                                            badgeLabel = "En attente";
                                                             break;
-                                                        case "processing": 
-                                                            badgeColor = "bg-blue-100 text-blue-700"; 
-                                                            badgeLabel = "En cours"; 
+                                                        case "processing":
+                                                            badgeColor = "bg-blue-100 text-blue-700";
+                                                            badgeLabel = "En cours";
                                                             break;
-                                                        case "completed": 
-                                                            badgeColor = "bg-green-100 text-green-700"; 
-                                                            badgeLabel = "Terminée"; 
+                                                        case "completed":
+                                                            badgeColor = "bg-green-100 text-green-700";
+                                                            badgeLabel = "Terminée";
                                                             break;
-                                                        case "canceled": 
-                                                            badgeColor = "bg-red-100 text-red-700"; 
-                                                            badgeLabel = "Annulée"; 
+                                                        case "canceled":
+                                                            badgeColor = "bg-red-100 text-red-700";
+                                                            badgeLabel = "Annulée";
                                                             break;
                                                     }
                                                     return (
@@ -396,18 +418,17 @@ export default function AdminOrders() {
                                             {/* Bouton Détails Accordéon */}
                                             <button
                                                 onClick={() => toggleOrderExpand(order.id)}
-                                                className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm transition-all border ${
-                                                    isExpanded 
-                                                        ? "bg-gray-100 text-gray-700 border-gray-200" 
+                                                className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-bold text-sm transition-all border ${isExpanded
+                                                        ? "bg-gray-100 text-gray-700 border-gray-200"
                                                         : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:text-gray-900"
-                                                }`}
+                                                    }`}
                                             >
                                                 <span>{isExpanded ? "Masquer détails" : "Voir produits"}</span>
-                                                <svg 
-                                                    xmlns="http://www.w3.org/2000/svg" 
-                                                    className={`h-4 w-4 transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`} 
-                                                    fill="none" 
-                                                    viewBox="0 0 24 24" 
+                                                <svg
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    className={`h-4 w-4 transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`}
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
                                                     stroke="currentColor"
                                                 >
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
@@ -420,11 +441,10 @@ export default function AdminOrders() {
                                                     <button
                                                         disabled={processingId === `${order.id}-ship` || !!order._shipped}
                                                         onClick={() => handleAction(order, "ship")}
-                                                        className={`px-5 py-3 rounded-2xl font-bold text-sm transition-all ${
-                                                            order._shipped
+                                                        className={`px-5 py-3 rounded-2xl font-bold text-sm transition-all ${order._shipped
                                                                 ? "bg-gray-100 text-gray-400 cursor-not-allowed line-through"
                                                                 : "bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow"
-                                                        }`}
+                                                            }`}
                                                     >
                                                         {processingId === `${order.id}-ship` ? "..." : order._shipped ? "✓ Expédié" : "Expédier"}
                                                     </button>
@@ -442,11 +462,10 @@ export default function AdminOrders() {
                                                     <button
                                                         disabled={processingId === `${order.id}-invoice` || !!order._invoiced}
                                                         onClick={() => handleAction(order, "invoice")}
-                                                        className={`px-5 py-3 rounded-2xl font-bold text-sm transition-all ${
-                                                            order._invoiced
+                                                        className={`px-5 py-3 rounded-2xl font-bold text-sm transition-all ${order._invoiced
                                                                 ? "bg-gray-100 text-gray-400 cursor-not-allowed line-through"
                                                                 : "bg-green-600 text-white hover:bg-green-700 shadow-sm hover:shadow"
-                                                        }`}
+                                                            }`}
                                                     >
                                                         {processingId === `${order.id}-invoice` ? "..." : order._invoiced ? "✓ Facturé" : "Facturer"}
                                                     </button>

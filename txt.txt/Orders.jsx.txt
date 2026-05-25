@@ -25,7 +25,19 @@ export default function Orders() {
             ...order,
             status: meta.status || order.status,
             created_at: meta.created_at 
-                ? new Date(meta.created_at.replace(/(\d{2})\/(\d{2})\/(\d{4})/, '$3-$2-$1')).toISOString() 
+                ? (() => {
+                    const dateMatch = meta.created_at.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+                    if (dateMatch) {
+                        const timeMatch = meta.created_at.match(/(\d{2}:\d{2})/);
+                        const timeStr = timeMatch ? timeMatch[1] : '00:00';
+                        const localIsoStr = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}T${timeStr}:00`;
+                        const parsedDate = new Date(localIsoStr);
+                        if (!isNaN(parsedDate.getTime())) {
+                            return parsedDate.toISOString();
+                        }
+                    }
+                    return order.created_at;
+                })()
                 : order.created_at,
             grand_total: meta.grand_total,
             formated_grand_total: `${meta.grand_total.toFixed(2)} €`,

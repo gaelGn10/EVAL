@@ -209,14 +209,63 @@ export default function ProductDetail() {
               <h1 className="text-4xl sm:text-5xl font-black text-gray-900 leading-tight mb-4">
                 {product.name}
               </h1>
-
               <div className="flex items-center flex-wrap gap-4 mb-8">
-                <span className="text-4xl font-bold text-blue-600">
-                  {product.formated_price || `${product.price} €`}
-                </span>
-                {stockBadge}
-              </div>
 
+                {(() => {
+
+                  const specialPrice = parseFloat(
+                    product.special_price ||
+                    product.prix_promo ||
+                    0
+                  );
+
+                  const originalPrice = parseFloat(
+                    product.regular_price ||
+                    product.prix_vente ||
+                    product.price ||
+                    0
+                  );
+
+                  const hasPromo =
+                    specialPrice > 0 &&
+                    originalPrice > 0 &&
+                    originalPrice !== specialPrice;
+
+                  if (hasPromo) {
+
+                    return (
+                      <div className="flex items-center gap-3 flex-wrap">
+
+                        {/* Prix promo */}
+                        <span className="text-4xl font-bold text-red-600">
+                          {specialPrice.toFixed(2)} €
+                        </span>
+
+                        {/* Prix normal barré */}
+                        <span className="text-2xl text-gray-500 line-through decoration-red-500 decoration-2">
+                          {originalPrice.toFixed(2)} €
+                        </span>
+
+                        {/* Badge promo */}
+                        <span className="bg-red-100 text-red-600 text-sm font-semibold px-3 py-1 rounded-full">
+                          Promo
+                        </span>
+
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <span className="text-4xl font-bold text-blue-600">
+                      {originalPrice.toFixed(2)} €
+                    </span>
+                  );
+
+                })()}
+
+                {stockBadge}
+
+              </div>
               <div className="prose prose-blue max-w-none text-gray-600 mb-10 leading-relaxed">
                 <div dangerouslySetInnerHTML={{ __html: product.description }} />
               </div>
@@ -243,11 +292,10 @@ export default function ProductDetail() {
                 <button
                   disabled={stockQty !== null && !isNaN(stockQty) && stockQty <= 0}
                   onClick={handleAddToCart}
-                  className={`flex-1 font-bold py-4 px-8 rounded-2xl transition-all flex items-center justify-center gap-3 group ${
-                    stockQty !== null && !isNaN(stockQty) && stockQty <= 0
-                      ? "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"
-                      : "bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-200 hover:shadow-blue-300 active:scale-[0.98]"
-                  }`}
+                  className={`flex-1 font-bold py-4 px-8 rounded-2xl transition-all flex items-center justify-center gap-3 group ${stockQty !== null && !isNaN(stockQty) && stockQty <= 0
+                    ? "bg-gray-200 text-gray-400 cursor-not-allowed shadow-none"
+                    : "bg-blue-600 hover:bg-blue-700 text-white shadow-xl shadow-blue-200 hover:shadow-blue-300 active:scale-[0.98]"
+                    }`}
                 >
                   {stockQty !== null && !isNaN(stockQty) && stockQty <= 0 ? (
                     "RUPTURE DE STOCK"

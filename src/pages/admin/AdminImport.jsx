@@ -46,46 +46,36 @@ export default function AdminImport() {
 
     const parseFile = (file) => {
         return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const text = e.target.result;
-                const lines = text.split(/\r?\n/).filter(l => l.trim() !== "");
 
-                if (lines.length < 2) {
-                    reject(new Error("Le fichier est vide ou mal formaté."));
-                    return;
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                encoding: "UTF-8",
+
+                transformHeader: (header) => {
+                    return header
+                        .trim()
+                        .toLowerCase()
+                        .replace(/['"\s\ufeff]+/g, "");
+                },
+
+                complete: (results) => {
+
+                    if (!results.data || results.data.length === 0) {
+                        reject(new Error("Fichier vide ou invalide"));
+                        return;
+                    }
+
+                    console.log("CSV détecté :", results.data);
+
+                    resolve(results.data);
+                },
+
+                error: (err) => {
+                    reject(err);
                 }
+            });
 
-                // Détection automatique du séparateur : tabulation ou point-virgule ou virgule
-                const firstLine = lines[0];
-                const sep = firstLine.includes("\t") ? "\t"
-                    : firstLine.includes(";") ? ";"
-                        : ",";
-
-                const headers = firstLine.split(sep).map(h => h.trim().toLowerCase().replace(/['"\s\ufeff]+/g, ""));
-
-                const data = [];
-                for (let i = 1; i < lines.length; i++) {
-                    // On découpe uniquement sur le séparateur PRINCIPAL (tab/; /,)
-                    // La colonne "achat" contient des ; internes qu'il ne faut PAS couper
-                    const parts = splitRespectingBraces(lines[i], sep);
-                    if (parts.length < 2) continue;
-
-                    const row = {};
-                    headers.forEach((h, idx) => {
-                        let val = (parts[idx] || "").trim();
-                        // Nettoyer les guillemets simples ou doubles autour de la valeur
-                        val = val.replace(/^['"]|['"]$/g, "").trim();
-                        row[h] = val;
-                    });
-                    data.push(row);
-                }
-
-                console.log("Données brutes détectées:", data);
-                resolve(data);
-            };
-            reader.onerror = () => reject(new Error("Impossible de lire le fichier."));
-            reader.readAsText(file, "UTF-8");
         });
     };
 
@@ -111,107 +101,344 @@ export default function AdminImport() {
     };
 
     const importProducts = async (file) => {
+
+        // ✅ Fonction robuste pour convertir les nombres français
+        const parseNumber = (value) => {
+
+            if (value === null || value === undefined) return 0;
+
+            return parseFloat(
+                value
+                    .toString()
+                    .trim()
+                    .replace(/\s/g, "") // retire espaces
+                    .replace(/,/g, ".") // virgule -> point
+                    .replace(/[^\d.-]/g, "")
+            ) || 0;
+        };
+
+        // ✅ Normalisation des headers
+        const normalizeHeader = (header) => {
+            return header
+                .toLowerCase()
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .trim();
+        };
+
         try {
+
             setLoading(true);
+
             const activeToken = await getValidAdminToken();
             const TOKEN = activeToken;
-            setStatus({ type: "info", message: "Analyse du fichier..." });
-            const rawData = await parseFile(file);
-            if (!rawData || rawData.length === 0) throw new Error("Fichier vide");
 
-            // Charger le cache des catégories existantes
+            setStatus({
+                type: "info",
+                message: "Analyse du fichier..."
+            });
+
+            const rawData = await parseFile(file);
+
+            if (!rawData || rawData.length === 0) {
+                throw new Error("Fichier vide");
+            }
             let existingCategories = [];
+
             try {
-                const catRes = await fetch("http://localhost:8008/api/v1/admin/catalog/categories?limit=100", {
-                    headers: { "Accept": "application/json", "Authorization": `Bearer ${TOKEN}` }
-                });
+
+                const catRes = await fetch(
+                    "http://localhost:8008/api/v1/admin/catalog/categories?limit=100",
+                    {
+                        headers: {
+                            "Accept": "application/json",
+                            "Authorization": `Bearer ${TOKEN}`
+                        }
+                    }
+                );
+
                 if (catRes.ok) {
+
                     const catData = await catRes.json();
                     existingCategories = catData?.data || [];
                 }
             } catch (e) {
-                console.error("Impossible de charger le cache des catégories", e);
+
+                console.error(
+                    "Impossible de charger le cache des catégories",
+                    e
+                );
             }
+            const rootCategory =
+                existingCategories.find(
+                    c =>
+                        c.id === 1 ||
+                        c.id === "1" ||
+                        c.slug === "root" ||
+                        c.name?.toLowerCase() === "racine"
+                ) ||
+                existingCategories.find(
+                    c => c.parent_id === null || !c.parent_id
+                ) ||
+                existingCategories[0];
 
-            // Trouver la catégorie racine de manière robuste (priorité absolue à l'ID 1, au slug root, ou au nom racine)
-            const rootCategory = existingCategories.find(c => c.id === 1 || c.id === "1" || c.slug === "root" || c.name?.toLowerCase() === "racine") || existingCategories.find(c => c.parent_id === null || !c.parent_id) || existingCategories[0];
-            const rootCategoryId = rootCategory ? parseInt(rootCategory.id) : 1;
-            console.log(`ID de la catégorie racine détecté : ${rootCategoryId}`);
+            const rootCategoryId = rootCategory
+                ? parseInt(rootCategory.id)
+                : 1;
 
-            // Détection dynamique des locales actives du backend pour contourner les erreurs de validation
+            console.log(
+                `ID de la catégorie racine détecté : ${rootCategoryId}`
+            );
             const activeLocales = [];
+
             if (rootCategory) {
-                if (rootCategory.translations && Array.isArray(rootCategory.translations)) {
+
+                if (
+                    rootCategory.translations &&
+                    Array.isArray(rootCategory.translations)
+                ) {
+
                     rootCategory.translations.forEach(t => {
-                        if (t.locale && !activeLocales.includes(t.locale)) {
+
+                        if (
+                            t.locale &&
+                            !activeLocales.includes(t.locale)
+                        ) {
                             activeLocales.push(t.locale);
                         }
                     });
                 }
-                const commonLocales = ["fr", "en", "fr_FR", "en_US"];
+
+                const commonLocales = [
+                    "fr",
+                    "en",
+                    "fr_FR",
+                    "en_US"
+                ];
+
                 commonLocales.forEach(loc => {
-                    if (rootCategory[loc] && !activeLocales.includes(loc)) {
+
+                    if (
+                        rootCategory[loc] &&
+                        !activeLocales.includes(loc)
+                    ) {
                         activeLocales.push(loc);
                     }
                 });
             }
+
             if (activeLocales.length === 0) {
-                activeLocales.push("fr", "en"); // fallback
-            }
-            console.log("Locales actives détectées :", activeLocales);
-
-            // 1. Validation : Nom de colonne non conforme
-            const headers = Object.keys(rawData[0] || {});
-            const hasSkuHeader = headers.some(h => ["sku", "ref"].includes(h));
-            const hasNameHeader = headers.some(h => ["name", "nom", "label"].includes(h));
-            const hasPriceHeader = headers.some(h => ["price", "prix", "prix_vente", "prix_promo", "promo"].includes(h));
-            const hasStockHeader = headers.some(h => ["stock_initial", "stock"].includes(h));
-
-            if (!hasSkuHeader || !hasNameHeader || !hasPriceHeader || !hasStockHeader) {
-                throw new Error("Nom de colonne non conforme. Les colonnes 'sku', 'nom' (ou 'name'), 'prix_vente' (ou 'prix') et 'stock' sont requises.");
+                activeLocales.push("fr", "en");
             }
 
-            // 2. Validation : Montant positif
+            console.log(
+                "Locales actives détectées :",
+                activeLocales
+            );
+            const headers = Object.keys(rawData[0] || {})
+                .map(normalizeHeader);
+
+            const hasSkuHeader = headers.some(h =>
+                ["sku", "ref"].includes(h)
+            );
+
+            const hasNameHeader = headers.some(h =>
+                ["name", "nom", "label"].includes(h)
+            );
+
+            const hasPriceHeader = headers.some(h =>
+                ["price", "prix", "prix_vente"].includes(h)
+            );
+
+            const hasStockHeader = headers.some(h =>
+                ["stock_initial", "stock"].includes(h)
+            );
+
+            if (
+                !hasSkuHeader ||
+                !hasNameHeader ||
+                !hasPriceHeader ||
+                !hasStockHeader
+            ) {
+
+                throw new Error(
+                    "Nom de colonne non conforme. " +
+                    "Les colonnes SKU, nom, prix et stock sont requises."
+                );
+
+            }
+            const skuSet = new Set();
+
             for (let i = 0; i < rawData.length; i++) {
+
                 const row = rawData[i];
-                const sku = (row.sku || row.ref || Object.values(row)[1] || "").toString().trim();
-                const promoVal = (row.prix_promo || row.promo || "").toString().trim();
-                const promoPrice = promoVal ? parseFloat(promoVal.replace(",", ".").replace(/[^-0-9.]/g, "")) || 0 : 0;
-                const regularVal = (row.prix_vente || row.prix || row.price || Object.values(row)[4] || "0").toString();
-                const regularPrice = parseFloat(regularVal.replace(",", ".").replace(/[^-0-9.]/g, "")) || 0;
-                const price = promoPrice > 0 ? promoPrice : regularPrice;
 
-                if (price <= 0 || regularPrice <= 0 || (promoVal && promoPrice <= 0)) {
-                    throw new Error("montant positif requis : le prix du produit '" + (sku || 'Ligne ' + (i + 1)) + "' doit être strictement supérieur à 0.");
+                const sku = (
+                    row.sku ||
+                    row.ref ||
+                    ""
+                ).toString().trim();
+
+                const name = (
+                    row.name ||
+                    row.nom ||
+                    row.label ||
+                    ""
+                ).toString().trim();
+
+                const promoVal = (
+                    row.prix_promo ||
+                    row.promo ||
+                    ""
+                ).toString().trim();
+
+                const promoPrice = parseNumber(
+                    row.prix_promo ||
+                    row.promo
+                );
+
+                const regularPrice = parseNumber(
+                    row.prix_vente ||
+                    row.prix ||
+                    row.price
+                );
+
+                const achatPrice = parseNumber(
+                    row.prix_achat ||
+                    row.achat ||
+                    row.cost
+                );
+
+                const qty = Number(
+                    row.stock_initial ||
+                    row.stock ||
+                    0
+                );
+                if (!sku) {
+
+                    throw new Error(
+                        `SKU manquant ligne ${i + 1}`
+                    );
+
                 }
-            }
 
-            setProgress({ current: 0, total: rawData.length, type: "Produits" });
+                if (!name) {
+
+                    throw new Error(
+                        `Nom produit manquant ligne ${i + 1}`
+                    );
+
+                }
+
+                if (skuSet.has(sku)) {
+
+                    throw new Error(
+                        `SKU dupliqué détecté : ${sku}`
+                    );
+
+                }
+
+                skuSet.add(sku);
+
+                if (
+                    !regularPrice ||
+                    regularPrice <= 0
+                ) {
+
+                    throw new Error(
+                        `Prix invalide pour le produit ${sku}`
+                    );
+
+                }
+
+                if (
+                    promoVal && promoPrice <= 0
+                ) {
+
+                    throw new Error(
+                        `Montant positif requis pour le prix promo de ${sku}`
+                    );
+
+                }
+
+                if (
+                    isNaN(qty) ||
+                    qty < 0
+                ) {
+
+                    throw new Error(
+                        `Stock invalide pour ${sku}`
+                    );
+
+                }
+
+            }
+            setProgress({
+                current: 0,
+                total: rawData.length,
+                type: "Produits"
+            });
+
+            // ======================================================
+            // IMPORT DES PRODUITS
+            // ======================================================
 
             let successCount = 0;
             const failedCategories = [];
+
             for (let i = 0; i < rawData.length; i++) {
-                let row = rawData[i];
 
-                setProgress(prev => ({ ...prev, current: i + 1 }));
+                const row = rawData[i];
 
-                const name = (row.name || row.nom || row.label || Object.values(row)[2] || "Produit sans nom").toString().trim();
-                const sku = (row.sku || row.ref || Object.values(row)[1] || `sku-${Date.now()}-${i}`).toString().trim();
+                setProgress(prev => ({
+                    ...prev,
+                    current: i + 1
+                }));
 
-                // ✅ Priorité au prix promo s'il existe et est valide
-                const promoVal = (row.prix_promo || row.promo || "").toString().trim();
-                const promoPrice = promoVal ? parseFloat(promoVal.replace(",", ".").replace(/[^-0-9.]/g, "")) || 0 : 0;
-                const regularVal = (row.prix_vente || row.prix || row.price || Object.values(row)[4] || "0").toString();
-                const regularPrice = parseFloat(regularVal.replace(",", ".").replace(/[^-0-9.]/g, "")) || 0;
-                // Le prix effectif : promo si dispo, sinon prix vente
-                const price = promoPrice > 0 ? promoPrice : regularPrice;
+                const name = (
+                    row.name ||
+                    row.nom ||
+                    row.label ||
+                    "Produit sans nom"
+                ).toString().trim();
+
+                const sku = (
+                    row.sku ||
+                    row.ref ||
+                    `sku-${Date.now()}-${i}`
+                ).toString().trim();
+
+                const promoPrice = parseNumber(
+                    row.prix_promo ||
+                    row.promo
+                );
+
+                const regularPrice = parseNumber(
+                    row.prix_vente ||
+                    row.prix ||
+                    row.price
+                );
+
+                const achatPrice = parseNumber(
+                    row.prix_achat ||
+                    row.achat ||
+                    row.cost
+                );
+
                 const hasPromo = promoPrice > 0;
 
-                const qty = parseInt(row.stock_initial || row.stock || Object.values(row)[7] || 0);
+                const qty = Number(
+                    row.stock_initial ||
+                    row.stock ||
+                    0
+                );
 
-                if (sku && price > 0) {
-                    console.log(`📦 Produit lu: ${sku} → ${price} € ${hasPromo ? `(PROMO, prix normal: ${regularPrice} €)` : "(prix normal)"}`);
-                }
+                console.log(
+                    `📦 Produit lu: ${sku} → prix_vente: ${regularPrice} € ${hasPromo
+                        ? `| PROMO: ${promoPrice} €`
+                        : "(pas de promo)"
+                    }${achatPrice > 0 ? ` | prix_achat: ${achatPrice} €` : ""}`
+                );
 
                 // Détermination de la catégorie
                 const categoryKey = Object.keys(row).find(k =>
@@ -493,7 +720,12 @@ export default function AdminImport() {
                         sku: sku,
                         name: name,
                         url_key: urlKey,
-                        price: price,
+                        price: regularPrice,                           // prix_vente → affiché barré si promo
+                        special_price: promoPrice > 0 ? promoPrice : null, // prix_promo → prix appliqué à l'achat
+                        cost: achatPrice > 0 ? achatPrice : undefined,  // prix_achat → coût interne
+                        prix_vente: regularPrice,                      // attribut personnalisé Bagisto
+                        prix_promo: promoPrice > 0 ? promoPrice : null,// attribut personnalisé Bagisto
+                        prix_achat: achatPrice > 0 ? achatPrice : undefined, // attribut personnalisé Bagisto
                         weight: row.weight || row.poids || 1,
                         status: 1,
                         visible_individually: 1,
@@ -920,10 +1152,6 @@ export default function AdminImport() {
                             const orderData = await orderRes.json();
                             const bagistoOrderId = orderData.data?.order?.id || orderData.data?.id;
                             console.log(`✓ Commande insérée dans l'API Bagisto pour ${email} (ID: ${bagistoOrderId})`);
-
-                            // ==============================================================================
-                            // SYNCHRONISATION DU STATUT DANS LE BACKEND OFFICIEL BAGISTO (INVOICE, SHIP, CANCEL)
-                            // ==============================================================================
                             if (statusStr !== "pending") {
                                 try {
                                     console.log(`🔄 Mise à jour du statut Bagisto vers : ${statusStr} pour la commande ${bagistoOrderId}`);
@@ -1067,9 +1295,6 @@ export default function AdminImport() {
                                     console.error(`Erreur de synchronisation du statut pour la commande ${bagistoOrderId}`, e);
                                 }
                             }
-                            // ==============================================================================
-
-                            // --- DECREASE STOCK FOR NON-INVOICED ACTIVE ORDERS (e.g. 'PENDING') ---
                             if (statusStr !== "completed" && statusStr !== "processing" && statusStr !== "canceled") {
                                 console.log("📉 Diminution du stock pour les articles de la commande importée en attente...");
                                 for (const item of itemsWithPrices) {
@@ -1109,10 +1334,6 @@ export default function AdminImport() {
                                     }
                                 }
                             }
-                            // ==============================================================================
-
-                            // Sauvegarde des métadonnées (status, date, vrai total) pour l'affichage FrontOffice
-                            // Les flags invoiced/shipped permettent à AdminOrders.jsx de calculer le statut et les boutons
                             const existingOrders = JSON.parse(localStorage.getItem('imported_orders_meta') || '[]');
                             existingOrders.push({
                                 bagisto_order_id: bagistoOrderId,
@@ -1149,7 +1370,6 @@ export default function AdminImport() {
             setLoading(false);
         }
     };
-
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col">
             <header className="bg-gray-900 text-white p-4 flex justify-between items-center shadow-lg">
@@ -1162,7 +1382,6 @@ export default function AdminImport() {
                     <h1 className="text-xl font-bold tracking-tight">Importation des données</h1>
                 </div>
             </header>
-
             <main className="p-10 flex-grow max-w-4xl mx-auto w-full">
                 {status && (
                     <div className={`mb-8 p-4 rounded-2xl border flex items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-300 ${status.type === "success" ? "bg-green-50 border-green-100 text-green-700" :
@@ -1179,7 +1398,6 @@ export default function AdminImport() {
                         <button onClick={() => setStatus(null)} className="ml-auto text-current opacity-50 hover:opacity-100 font-bold">×</button>
                     </div>
                 )}
-
                 <div className="grid gap-8">
                     <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
                         <div className="flex items-center gap-6 mb-8">
@@ -1257,9 +1475,6 @@ export default function AdminImport() {
                                 <p className="text-gray-500 text-sm">Format: date, heure, client, achat, status</p>
                             </div>
                         </div>
-
-
-
                         <label className="block">
                             <span className="text-sm font-bold text-gray-700 block mb-2">Fichier de commandes</span>
                             <input

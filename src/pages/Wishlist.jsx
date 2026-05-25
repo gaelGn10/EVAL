@@ -167,13 +167,38 @@ export default function Wishlist() {
                     {product.short_description?.replace(/<[^>]*>/g, "") || "Aucune description disponible."}
                   </p>
 
-                  <div className="mt-auto pt-4 border-t border-gray-50">
-                    <div className="flex justify-between items-center mb-6">
-                      <span className="text-xs font-bold text-gray-400">Prix unitaire</span>
-                      <span className="text-2xl font-black text-blue-600">
-                        {product.formated_price || `${product.price} €`}
-                      </span>
-                    </div>
+                       <div className="mt-auto pt-4 border-t border-gray-50">
+                        <div className="flex justify-between items-center mb-6">
+                          <span className="text-xs font-bold text-gray-400">Prix unitaire</span>
+                          {(() => {
+                            // Mode promo uniquement si le prix d'origine est distinct du prix spécial
+                            const specialPrice = parseFloat(product.special_price || product.prix_promo || 0);
+                            const originalPrice = parseFloat(product.regular_price || product.prix_vente || product.price || 0);
+                            const hasPromo = specialPrice > 0 && originalPrice > 0 && originalPrice !== specialPrice;
+
+                            if (hasPromo) {
+                              return (
+                                <div className="flex items-center gap-2 flex-wrap justify-end">
+                                  <span className="text-2xl font-black text-red-600">
+                                    {specialPrice.toFixed(2)} €
+                                  </span>
+                                  <span className="text-sm text-gray-400 line-through decoration-red-500 decoration-2">
+                                    {originalPrice.toFixed(2)} €
+                                  </span>
+                                  <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                    Promo
+                                  </span>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <span className="text-2xl font-black text-blue-600">
+                                {product.prix_vente ? `${parseFloat(product.prix_vente).toFixed(2)} €` : (product.formated_price || `${originalPrice.toFixed(2)} €`)}
+                              </span>
+                            );
+                          })()}
+                        </div>
 
                     <div className="grid grid-cols-5 gap-2">
                       <button

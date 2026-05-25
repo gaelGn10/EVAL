@@ -85,6 +85,18 @@ export default function AdminDashboard() {
                             <p className="text-sm text-gray-500">Vider le cache et les sessions locales</p>
                         </div>
                     </Link>
+
+                    <Link to="/admin/stock-multiple" className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm hover:shadow-md transition-all group flex items-center gap-6">
+                        <div className="w-16 h-16 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-gray-900 group-hover:text-green-600 transition-colors">Ajout Multiple au Stock</h3>
+                            <p className="text-sm text-gray-500">Ajouter du stock sur plusieurs produits à la fois</p>
+                        </div>
+                    </Link>
                 </div>
             </main>
         </div>
