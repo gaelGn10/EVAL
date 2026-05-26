@@ -45,7 +45,7 @@ export default function AdminStockMultiple() {
         } catch (e) {
             console.error("Erreur login auto admin", e);
         }
-
+         
         return BASE_TOKEN;
     };
 

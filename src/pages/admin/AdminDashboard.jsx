@@ -7,6 +7,7 @@ export default function AdminDashboard() {
         sessionStorage.removeItem("bagisto_admin_token");
         navigate("/admin/login");
     };
+    
 
     return (
         <div className="min-h-screen bg-gray-100 flex flex-col">
@@ -97,11 +98,24 @@ export default function AdminDashboard() {
                             <p className="text-sm text-gray-500">Ajouter du stock sur plusieurs produits à la fois</p>
                         </div>
                     </Link>
+
+                    <Link to="/admin/remove-stock" className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm hover:shadow-md transition-all group flex items-center gap-6">
+                        <div className="w-16 h-16 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-gray-900 group-hover:text-red-600 transition-colors">Retrait par catégorie</h3>
+                            <p className="text-sm text-gray-500">Retirer du stock à tous les produits d'une catégorie</p>
+                        </div>
+                    </Link>
                 </div>
             </main>
         </div>
     );
 }
+
 
 function StatCard({ title, value, color }) {
     return (

@@ -17,6 +17,7 @@ import AdminImportImage from "../pages/admin/AdminImportImage";
 import AdminStock from "../pages/admin/AdminStock";
 import Wishlist from "../pages/Wishlist";
 import AdminStockMultiple from "../pages/admin/AdminStockMultiple";
+import AdminRemoveStock from "../pages/admin/AdminRemoveStock";
 
 
 const routes = [
@@ -91,6 +92,13 @@ const routes = [
     path: "/admin/stock-multiple",
     component: AdminStockMultiple,
     title: "Ajout Multiple Stock",
+    private: true,
+    admin: true,
+  },
+  {
+    path: "/admin/remove-stock",
+    component: AdminRemoveStock,
+    title: "Remove Stock",
     private: true,
     admin: true,
   },
